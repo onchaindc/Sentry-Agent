@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", "Arial", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #f4f1eb;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  color: #111827;
+  background:
+    linear-gradient(rgba(28, 27, 24, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 27, 24, 0.04) 1px, transparent 1px),
+    #f4f1eb;
+  background-size: 32px 32px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: #ff4da6;
+  color: #111827;
+}
