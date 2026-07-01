@@ -25,18 +25,6 @@ const initialPolicy: Policy = {
   ],
 };
 
-const statusStyles: Record<ActivityStatus, string> = {
-  approved: "border-line bg-ink text-white",
-  blocked: "border-line bg-accent text-ink",
-  checking: "border-line bg-panel text-ink",
-};
-
-const statusLabels: Record<ActivityStatus, string> = {
-  approved: "APPROVED",
-  blocked: "BLOCKED",
-  checking: "CHECKING",
-};
-
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -48,33 +36,31 @@ function formatCurrency(value: number) {
 
 function formatTime(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   }).format(timestamp);
 }
 
-function MetricCard({
+function SummaryStat({
   label,
   value,
-  hint,
 }: {
   label: string;
   value: string;
-  hint: string;
 }) {
   return (
-    <section className="rounded-[18px] border border-line bg-panel p-5 shadow-hard">
-      <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-ink/60">
+    <div className="border-l border-white/10 pl-4">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">
         {label}
       </p>
-      <p className="mt-3 text-4xl font-black leading-none text-ink">{value}</p>
-      <p className="mt-3 text-sm font-semibold text-ink/65">{hint}</p>
-    </section>
+      <p className="mt-1 font-mono text-lg font-semibold text-[var(--text)]">{value}</p>
+    </div>
   );
 }
 
-function PolicyField({
+function RailField({
   label,
   value,
   prefix,
@@ -90,54 +76,102 @@ function PolicyField({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="block rounded-2xl border border-line bg-white p-4 shadow-soft">
-      <span className="font-mono text-[10px] font-black uppercase tracking-[0.18em] text-ink/55">
+    <label className="grid gap-2 py-4">
+      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">
         {label}
       </span>
-      <span className="mt-3 flex items-center gap-2">
-        {prefix ? <span className="text-xl font-black">{prefix}</span> : null}
+      <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2">
+        {prefix ? (
+          <span className="font-mono text-sm font-semibold text-[var(--muted)]">{prefix}</span>
+        ) : null}
         <input
-          className="w-full bg-transparent text-3xl font-black leading-none outline-none"
+          className="w-full bg-transparent font-mono text-2xl font-semibold text-[var(--text)] outline-none"
           min={min}
           step={step}
           type="number"
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
         />
-      </span>
+      </div>
     </label>
   );
 }
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+function ControlButton({
+  active = false,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <article className="rounded-[18px] border border-line bg-white p-4 shadow-soft transition-transform duration-200 hover:-translate-y-0.5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-black leading-tight">{item.merchant}</p>
-            <span
-              className={`rounded-full border px-3 py-1 font-mono text-[10px] font-black tracking-[0.16em] ${statusStyles[item.status]}`}
-            >
-              {statusLabels[item.status]}
-            </span>
-          </div>
-          <p className="mt-1 max-w-2xl break-all text-sm font-semibold text-ink/65">
-            {item.endpoint}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-black">{formatCurrency(item.amount)}</p>
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-ink/50">
-            {formatTime(item.requestedAt)}
-          </p>
-        </div>
+    <button
+      className={`rounded-md border px-3 py-2 font-mono text-xs uppercase tracking-[0.18em] transition-colors ${
+        active
+          ? "border-[var(--accent)] bg-[rgba(0,255,156,0.08)] text-[var(--accent)]"
+          : "border-white/14 bg-transparent text-[var(--text)] hover:border-white/28 hover:bg-white/[0.03]"
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
+function StatusBadge({ status }: { status: ActivityStatus }) {
+  const badgeStyles =
+    status === "approved"
+      ? "border-[rgba(0,255,156,0.3)] text-[var(--accent)]"
+      : status === "blocked"
+        ? "border-[rgba(255,77,77,0.35)] text-[var(--danger)]"
+        : "border-white/12 text-[var(--muted)]";
+
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] ${badgeStyles}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+function ActivityRow({
+  item,
+  isNewest,
+}: {
+  item: ActivityItem;
+  isNewest: boolean;
+}) {
+  const rowTone =
+    item.status === "blocked"
+      ? "border-l-[var(--danger)]"
+      : item.status === "approved"
+        ? "border-l-[var(--accent)]"
+        : "border-l-transparent";
+
+  return (
+    <article
+      className={`border-b border-white/6 border-l-2 px-4 py-3 ${rowTone} ${isNewest ? "stream-row" : ""}`}
+    >
+      <div className="grid gap-2 lg:grid-cols-[88px_120px_minmax(0,1fr)_110px_auto] lg:items-center lg:gap-4">
+        <span className="font-mono text-xs text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
+        <span className="truncate font-mono text-xs uppercase tracking-[0.12em] text-[var(--text)]">
+          {item.merchant}
+        </span>
+        <span className="truncate font-mono text-sm text-[var(--text)]">{item.endpoint}</span>
+        <span className="font-mono text-sm font-semibold text-[var(--text)]">
+          {formatCurrency(item.amount)}
+        </span>
+        <StatusBadge status={item.status} />
       </div>
-      <div className="mt-4 grid gap-3 border-t border-line/15 pt-4 md:grid-cols-[1fr_auto] md:items-end">
-        <p className="text-sm font-bold leading-6 text-ink/75">{item.reason}</p>
-        <p className="font-mono text-[10px] font-black uppercase tracking-[0.16em] text-ink/45">
-          {item.complianceCost ? `x402 check ${formatCurrency(item.complianceCost)}` : item.purpose}
-        </p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span className="font-sans text-[var(--muted)]">{item.reason}</span>
+        <span className="font-mono uppercase tracking-[0.16em] text-[var(--muted)]">
+          {item.complianceCost ? `x402 ${formatCurrency(item.complianceCost)}` : item.purpose}
+        </span>
       </div>
     </article>
   );
@@ -161,7 +195,9 @@ export default function Home() {
     [activity],
   );
 
-  const updatePolicyNumber = (key: keyof Pick<Policy, "perCallCap" | "dailySpendLimit" | "dailyCallLimit">) => {
+  const updatePolicyNumber = (
+    key: keyof Pick<Policy, "perCallCap" | "dailySpendLimit" | "dailyCallLimit">,
+  ) => {
     return (value: number) => {
       setPolicy((current) => ({
         ...current,
@@ -181,33 +217,36 @@ export default function Home() {
     }));
   };
 
-  const settleComplianceCheck = useCallback(async (request: CasperPaymentRequest) => {
-    const result = await runMockX402ComplianceCheck(request);
+  const settleComplianceCheck = useCallback(
+    async (request: CasperPaymentRequest) => {
+      const result = await runMockX402ComplianceCheck(request);
 
-    setActivity((current) =>
-      current.map((item) => {
-        if (item.id !== request.id) {
-          return item;
-        }
+      setActivity((current) =>
+        current.map((item) => {
+          if (item.id !== request.id) {
+            return item;
+          }
 
-        const approvedSpendWithoutCurrent = current
-          .filter((entry) => entry.status === "approved" && entry.id !== request.id)
-          .reduce((sum, entry) => sum + entry.amount, 0);
-        const wouldExceedDailyLimit =
-          result.approved && approvedSpendWithoutCurrent + item.amount > policy.dailySpendLimit;
+          const approvedSpendWithoutCurrent = current
+            .filter((entry) => entry.status === "approved" && entry.id !== request.id)
+            .reduce((sum, entry) => sum + entry.amount, 0);
+          const wouldExceedDailyLimit =
+            result.approved && approvedSpendWithoutCurrent + item.amount > policy.dailySpendLimit;
 
-        return {
-          ...item,
-          status: result.approved && !wouldExceedDailyLimit ? "approved" : "blocked",
-          reason: wouldExceedDailyLimit
-            ? `Compliance cleared, but final approval would exceed today's $${policy.dailySpendLimit.toFixed(2)} limit.`
-            : result.reason,
-          checkedAt: Date.now(),
-          complianceCost: result.meteredCost,
-        };
-      }),
-    );
-  }, [policy.dailySpendLimit]);
+          return {
+            ...item,
+            status: result.approved && !wouldExceedDailyLimit ? "approved" : "blocked",
+            reason: wouldExceedDailyLimit
+              ? `Compliance cleared, but final approval would exceed today's $${policy.dailySpendLimit.toFixed(2)} limit.`
+              : result.reason,
+            checkedAt: Date.now(),
+            complianceCost: result.meteredCost,
+          };
+        }),
+      );
+    },
+    [policy.dailySpendLimit],
+  );
 
   const firePayment = useCallback(() => {
     const request = createMockPaymentRequest(requestIndex.current);
@@ -250,91 +289,47 @@ export default function Home() {
   const latest = activity[0];
 
   return (
-    <main className="min-h-screen px-5 py-6 text-ink sm:px-8 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_420px] lg:items-center">
-          <div>
-            <p className="font-mono text-xs font-black uppercase tracking-[0.2em] text-ink/55">
-              SENTRYAGENT / CASPER AGENTIC BUILDATHON 2026
-            </p>
-            <h1 className="mt-5 max-w-[10ch] text-[3.35rem] font-black leading-[0.9] text-ink sm:text-[4.4rem] lg:text-[5.4rem]">
-              Spend guardrails for
-              <span className="mt-3 inline-block rounded-[22px] bg-accent px-4 py-2 text-ink">
-                autonomous wallets
-              </span>
-              .
-            </h1>
-            <p className="mt-6 max-w-xl text-lg font-semibold leading-8 text-ink/70">
-              A policy layer between an AI agent and its Casper wallet, evaluating every x402
-              payment before funds move.
-            </p>
-          </div>
-
-          <div className="rounded-[20px] border border-line bg-panel p-5 shadow-hard lg:justify-self-end lg:w-full">
-            <p className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-ink/55">
-              MOCK AGENT / LIVE PAYMENT REQUESTS
-            </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <button
-                className="rounded-full border border-line bg-ink px-6 py-3 text-sm font-black uppercase tracking-[0.08em] text-white shadow-hard transition-transform hover:-translate-y-0.5"
-                type="button"
-                onClick={firePayment}
-              >
-                Fire request
-              </button>
-              <button
-                className={`rounded-full border border-line px-6 py-3 text-sm font-black uppercase tracking-[0.08em] shadow-hard transition-transform hover:-translate-y-0.5 ${
-                  isAutoRunning ? "bg-accent text-ink" : "bg-white text-ink"
-                }`}
-                type="button"
-                onClick={() => setIsAutoRunning((value) => !value)}
-              >
-                {isAutoRunning ? "Pause loop" : "Auto-loop"}
-              </button>
+    <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <header className="border-b border-white/8 bg-[rgba(10,10,12,0.88)] backdrop-blur">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-5 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-6">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <span className="status-pulse h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[var(--text)]">
+                SentryAgent / Spend Policy Monitor
+              </p>
             </div>
-            <p className="mt-4 text-sm font-bold leading-6 text-ink/65">
-              {latest
-                ? `Latest: ${latest.merchant} requested ${formatCurrency(latest.amount)}.`
-                : "Ready to generate simulated x402 payment attempts."}
+            <p className="mt-2 max-w-2xl font-mono text-xs text-[var(--muted)]">
+              Guardrail layer evaluating autonomous x402 wallet requests before Casper spend clears.
             </p>
           </div>
-        </header>
 
-        <section className="mt-8 grid gap-4 md:grid-cols-3">
-          <MetricCard
-            label="Today's Spend"
-            value={formatCurrency(snapshot.approvedSpend)}
-            hint={`${formatCurrency(Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0))} remaining`}
-          />
-          <MetricCard
-            label="Calls Made"
-            value={String(snapshot.attemptedCalls)}
-            hint={`${Math.max(policy.dailyCallLimit - snapshot.attemptedCalls, 0)} calls left in policy`}
-          />
-          <MetricCard
-            label="Calls Blocked"
-            value={String(snapshot.blockedCalls)}
-            hint={checkingCount ? `${checkingCount} pending compliance check` : "No pending checks"}
-          />
-        </section>
+          <div className="flex flex-wrap gap-5 lg:justify-end">
+            <SummaryStat label="Today's spend" value={formatCurrency(snapshot.approvedSpend)} />
+            <SummaryStat label="Calls made" value={String(snapshot.attemptedCalls)} />
+            <SummaryStat label="Calls blocked" value={String(snapshot.blockedCalls)} />
+          </div>
+        </div>
+      </header>
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[420px_1fr]">
-          <aside className="space-y-5">
-            <div className="rounded-[20px] border border-line bg-panel p-5 shadow-hard">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-ink/55">
-                    POLICY PANEL / EDITABLE RULES
-                  </p>
-                  <h2 className="mt-3 text-3xl font-black leading-none">Spend policy</h2>
-                </div>
-                <span className="rounded-full border border-line bg-accent px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.14em]">
-                  Local
-                </span>
+      <div className="mx-auto flex max-w-[1600px] flex-col lg:min-h-[calc(100vh-89px)] lg:flex-row">
+        <aside className="w-full border-b border-white/8 lg:w-[312px] lg:flex-none lg:border-b-0 lg:border-r lg:border-white/8">
+          <div className="lg:sticky lg:top-0 lg:h-[calc(100vh-89px)] lg:overflow-y-auto">
+            <section className="px-4 py-5 lg:px-5">
+              <div className="border-b border-white/8 pb-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">
+                  Policy rail
+                </p>
+                <h1 className="mt-2 font-mono text-lg font-semibold text-[var(--text)]">
+                  Runtime config
+                </h1>
+                <p className="mt-2 font-sans text-sm text-[var(--muted)]">
+                  Adjust spend thresholds and endpoint trust rules without touching the simulator.
+                </p>
               </div>
 
-              <div className="mt-5 grid gap-4">
-                <PolicyField
+              <div className="divide-y divide-white/8">
+                <RailField
                   label="Per-call cap"
                   min={0}
                   prefix="$"
@@ -342,7 +337,7 @@ export default function Home() {
                   value={policy.perCallCap}
                   onChange={updatePolicyNumber("perCallCap")}
                 />
-                <PolicyField
+                <RailField
                   label="Daily spend limit"
                   min={0}
                   prefix="$"
@@ -350,7 +345,7 @@ export default function Home() {
                   value={policy.dailySpendLimit}
                   onChange={updatePolicyNumber("dailySpendLimit")}
                 />
-                <PolicyField
+                <RailField
                   label="Daily call limit"
                   min={0}
                   step={1}
@@ -358,55 +353,126 @@ export default function Home() {
                   onChange={updatePolicyNumber("dailyCallLimit")}
                 />
               </div>
-            </div>
 
-            <div className="rounded-[20px] border border-line bg-panel p-5 shadow-hard">
-              <label className="block">
-                <span className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-ink/55">
-                  MERCHANT ALLOWLIST / ONE PREFIX PER LINE
-                </span>
-                <textarea
-                  className="mt-4 min-h-48 w-full resize-none rounded-2xl border border-line bg-white p-4 font-mono text-xs font-bold leading-6 text-ink outline-none shadow-soft focus:ring-4 focus:ring-accent/25"
-                  value={allowlistDraft}
-                  onChange={(event) => syncAllowlist(event.target.value)}
-                />
-              </label>
-            </div>
-          </aside>
-
-          <section className="rounded-[20px] border border-line bg-panel p-5 shadow-hard">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-ink/55">
-                  LIVE ACTIVITY / REAL-TIME
-                </p>
-                <h2 className="mt-3 text-3xl font-black leading-none">Attempted payments</h2>
+              <div className="mt-2 border-t border-white/8 pt-5">
+                <label className="block">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">
+                    Endpoint allowlist
+                  </span>
+                  <textarea
+                    className="mt-3 min-h-56 w-full resize-none rounded-md border border-white/10 bg-white/[0.02] px-3 py-3 font-mono text-xs leading-6 text-[var(--text)] outline-none transition-colors focus:border-[var(--accent)]"
+                    value={allowlistDraft}
+                    onChange={(event) => syncAllowlist(event.target.value)}
+                  />
+                </label>
               </div>
-              <button
-                className="rounded-full border border-line bg-white px-5 py-2.5 text-xs font-black uppercase tracking-[0.1em] shadow-hard transition-transform hover:-translate-y-0.5"
-                type="button"
-                onClick={() => setActivity([])}
-              >
-                Clear feed
-              </button>
-            </div>
 
-            <div className="mt-5 max-h-[660px] space-y-4 overflow-y-auto pr-1">
-              {activity.length ? (
-                activity.map((item) => <ActivityRow item={item} key={item.id} />)
-              ) : (
-                <div className="grid min-h-80 place-items-center rounded-[18px] border border-dashed border-line bg-white p-8 text-center shadow-soft">
-                  <div>
-                    <p className="text-3xl font-black leading-tight">No payments yet.</p>
-                    <p className="mt-3 max-w-md text-sm font-bold leading-6 text-ink/65">
-                      Start the mock agent to watch allowed merchants pass, risky endpoints get
-                      checked, and policy violations block before spend.
-                    </p>
+              <div className="mt-5 border-t border-white/8 pt-5">
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.18em]">
+                    <span className="text-[var(--muted)]">Pending checks</span>
+                    <span className="text-[var(--text)]">{checkingCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.18em]">
+                    <span className="text-[var(--muted)]">Remaining budget</span>
+                    <span className="text-[var(--text)]">
+                      {formatCurrency(Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0))}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono text-xs uppercase tracking-[0.18em]">
+                    <span className="text-[var(--muted)]">Latest merchant</span>
+                    <span className="max-w-[150px] truncate text-[var(--text)]">
+                      {latest ? latest.merchant : "none"}
+                    </span>
                   </div>
                 </div>
-              )}
+              </div>
+            </section>
+          </div>
+        </aside>
+
+        <section className="min-w-0 flex-1">
+          <div className="border-b border-white/8 px-4 py-4 lg:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">
+                  Mock agent controls
+                </p>
+                <p className="mt-2 font-sans text-sm text-[var(--muted)]">
+                  {latest
+                    ? `Last request: ${latest.merchant} attempted ${formatCurrency(latest.amount)}.`
+                    : "Simulator idle. Trigger a payment attempt to start the live stream."}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <ControlButton label="Fire request" onClick={firePayment} />
+                <ControlButton
+                  active={isAutoRunning}
+                  label={isAutoRunning ? "Pause loop" : "Auto loop"}
+                  onClick={() => setIsAutoRunning((value) => !value)}
+                />
+                <ControlButton label="Clear feed" onClick={() => setActivity([])} />
+              </div>
             </div>
-          </section>
+          </div>
+
+          <div className="px-4 py-5 lg:px-6">
+            <section className="overflow-hidden rounded-lg border border-white/8 bg-[var(--surface)]">
+              <div className="flex flex-col gap-3 border-b border-white/8 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">
+                    Live activity stream
+                  </p>
+                  <h2 className="mt-2 font-mono text-lg font-semibold text-[var(--text)]">
+                    Transaction monitor
+                  </h2>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span className="inline-flex items-center gap-2 rounded-md border border-white/8 px-3 py-2 font-mono uppercase tracking-[0.16em] text-[var(--muted)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+                    approved
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-md border border-white/8 px-3 py-2 font-mono uppercase tracking-[0.16em] text-[var(--muted)]">
+                    <span className="h-2 w-2 rounded-full bg-[var(--danger)]" />
+                    blocked
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-md border border-white/8 px-3 py-2 font-mono uppercase tracking-[0.16em] text-[var(--muted)]">
+                    <span className="h-2 w-2 rounded-full bg-white/30" />
+                    checking
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[88px_120px_minmax(0,1fr)_110px_auto] gap-4 border-b border-white/8 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)] max-lg:hidden">
+                <span>Time</span>
+                <span>Merchant</span>
+                <span>Endpoint</span>
+                <span>Amount</span>
+                <span>Status</span>
+              </div>
+
+              <div className="max-h-[calc(100vh-250px)] overflow-y-auto">
+                {activity.length ? (
+                  activity.map((item, index) => (
+                    <ActivityRow item={item} isNewest={index === 0} key={item.id} />
+                  ))
+                ) : (
+                  <div className="flex min-h-[360px] items-center justify-center px-6 py-16">
+                    <div className="max-w-xl text-center">
+                      <p className="font-mono text-sm uppercase tracking-[0.22em] text-[var(--muted)]">
+                        Awaiting traffic
+                      </p>
+                      <p className="mt-3 font-sans text-sm leading-7 text-[var(--muted)]">
+                        The stream will populate with simulated x402 payment attempts, policy
+                        decisions, and follow-up compliance checks as soon as the agent starts.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         </section>
       </div>
     </main>
