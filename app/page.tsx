@@ -6,6 +6,8 @@ import { evaluatePaymentRequest, type Policy, type SpendSnapshot } from "@/lib/p
 import { runMockX402ComplianceCheck } from "@/lib/x402";
 
 type ActivityStatus = "approved" | "blocked" | "checking";
+type ActivityFilter = "all" | "approved" | "blocked";
+type ChartRange = "1H" | "24H" | "7D";
 
 type ActivityItem = CasperPaymentRequest & {
   status: ActivityStatus;
@@ -24,6 +26,9 @@ const initialPolicy: Policy = {
     "https://marketpulse.exchange/quotes",
   ],
 };
+
+const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
+const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -47,107 +52,196 @@ function formatShortEndpoint(endpoint: string) {
   return endpoint.replace("https://", "").replace("http://", "");
 }
 
-function SummaryMetric({
-  label,
-  value,
-  tone = "default",
+function formatWalletAddress() {
+  return "0x82..4F1";
+}
+
+function ShieldCheckIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M12 3.25 5.75 5.9v5.35c0 4.4 2.65 8.48 6.25 9.5 3.6-1.02 6.25-5.1 6.25-9.5V5.9L12 3.25Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path
+        d="m9.4 12.1 1.8 1.85 3.45-3.75"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M13.25 2.75 6.75 13h4.5L10.75 21.25 17.25 11h-4.5l.5-8.25Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function CubeIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M12 3.75 5.5 7.25v9.5L12 20.25l6.5-3.5v-9.5L12 3.75Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path d="M5.75 7.5 12 11l6.25-3.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 11v9" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M8.5 17.25h7m-8-1.25V10a4.5 4.5 0 1 1 9 0v6l1.25 1.25H6.25L7.5 16Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path d="M10.5 17.25a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M8 6.25v11.5L17.25 12 8 6.25Z" />
+    </svg>
+  );
+}
+
+function PolicyCard({
+  icon,
+  title,
   detail,
 }: {
-  label: string;
-  value: string;
-  tone?: "default" | "accent" | "danger";
+  icon: React.ReactNode;
+  title: string;
   detail: string;
 }) {
-  const valueClass =
-    tone === "accent"
-      ? "terminal-value text-[var(--accent)]"
-      : tone === "danger"
-        ? "terminal-value-danger text-[var(--danger)]"
-        : "terminal-value text-[var(--text)]";
-
   return (
-    <div className="terminal-panel px-4 py-3">
-      <p className="terminal-label">{label}</p>
-      <p className={`mt-2 text-[1.85rem] font-semibold leading-none ${valueClass}`}>{value}</p>
-      <p className="mt-2 text-[11px] text-[var(--muted)]">{detail}</p>
+    <div className="glider-card flex items-center gap-3 rounded-[14px] px-4 py-4">
+      <div className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[rgba(34,197,94,0.14)] text-[var(--accent)]">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-[var(--text)]">{title}</p>
+        <p className="mt-1 text-[11px] text-[var(--muted)]">{detail}</p>
+      </div>
     </div>
   );
 }
 
-function RailField({
+function StatCard({
   label,
   value,
-  prefix,
-  min,
-  step,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  suffix?: string;
+}) {
+  return (
+    <div className="glider-card rounded-[14px] px-4 py-4">
+      <p className="text-[10px] uppercase tracking-[0.04em] text-[var(--faint)]">{label}</p>
+      <div className="mt-3 flex items-baseline gap-1">
+        <span className="text-[24px] font-semibold leading-none text-[var(--text)]">{value}</span>
+        {suffix ? <span className="text-[14px] text-[var(--muted)]">{suffix}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function SegmentTabs<T extends string>({
+  options,
+  active,
   onChange,
 }: {
-  label: string;
-  value: number;
-  prefix?: string;
-  min: number;
-  step: number;
-  onChange: (value: number) => void;
+  options: readonly T[];
+  active: T;
+  onChange: (option: T) => void;
 }) {
   return (
-    <label className="grid gap-2 py-3">
-      <span className="terminal-label">{label}</span>
-      <div className="terminal-input-shell flex items-center gap-2 px-3 py-2">
-        {prefix ? <span className="text-sm text-[var(--accent)]">{prefix}</span> : null}
-        <input
-          className="w-full bg-transparent text-[1.4rem] font-semibold leading-none text-[var(--text)] outline-none"
-          min={min}
-          step={step}
-          type="number"
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-        />
-      </div>
-    </label>
+    <div className="inline-flex items-center rounded-[999px] bg-[rgba(255,255,255,0.02)] p-1">
+      {options.map((option) => {
+        const isActive = option === active;
+
+        return (
+          <button
+            key={option}
+            className={`rounded-[999px] px-3 py-1.5 text-[11px] font-medium transition-colors ${
+              isActive
+                ? "bg-[rgba(34,197,94,0.14)] text-[var(--accent)]"
+                : "text-[var(--muted)] hover:text-[var(--text)]"
+            }`}
+            type="button"
+            onClick={() => onChange(option)}
+          >
+            {option === "all" ? "All" : option === "approved" ? "Approved" : option === "blocked" ? "Blocked" : option}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
-function ControlButton({
-  active = false,
-  label,
-  onClick,
-  priority = "default",
+function SpendChart({
+  values,
+  labels,
 }: {
-  active?: boolean;
-  label: string;
-  onClick: () => void;
-  priority?: "default" | "primary";
+  values: number[];
+  labels: string[];
 }) {
-  const className =
-    priority === "primary" || active
-      ? "border-[rgba(0,255,156,0.5)] bg-[rgba(0,255,156,0.08)] text-[var(--accent)] shadow-[inset_0_0_0_1px_rgba(0,255,156,0.12),0_0_24px_rgba(0,255,156,0.08)] hover:border-[rgba(0,255,156,0.9)] hover:bg-[rgba(0,255,156,0.12)]"
-      : "border-white/14 bg-[rgba(255,255,255,0.02)] text-[var(--text)] hover:border-white/30 hover:bg-[rgba(255,255,255,0.05)]";
+  const max = Math.max(...values, 1);
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * 100;
+      const y = 100 - (value / max) * 68 - 14;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const area = `0,100 ${points} 100,100`;
 
   return (
-    <button
-      className={`rounded-[5px] border px-3 py-2 text-[11px] uppercase tracking-[0.14em] transition-all duration-150 hover:shadow-[0_0_18px_rgba(0,255,156,0.06)] ${className}`}
-      type="button"
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: ActivityStatus }) {
-  const badgeStyles =
-    status === "approved"
-      ? "border-[rgba(0,255,156,0.32)] text-[var(--accent)]"
-      : status === "blocked"
-        ? "border-[rgba(255,59,59,0.36)] text-[var(--danger)]"
-        : "border-[rgba(255,176,32,0.32)] text-[var(--warning)]";
-
-  return (
-    <span
-      className={`inline-flex w-fit items-center rounded-[4px] border px-2 py-1 text-[10px] uppercase tracking-[0.12em] ${badgeStyles}`}
-    >
-      {status}
-    </span>
+    <div className="mt-5">
+      <div className="relative h-[120px] w-full">
+        <svg aria-hidden="true" className="h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <line x1="0" x2="100" y1="24" y2="24" className="chart-grid" />
+          <line x1="0" x2="100" y1="50" y2="50" className="chart-grid" />
+          <line x1="0" x2="100" y1="76" y2="76" className="chart-grid" />
+          <path d={`M ${area}`} fill="rgba(34,197,94,0.1)" stroke="none" />
+          <polyline
+            fill="none"
+            points={points}
+            stroke="var(--accent)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+          />
+        </svg>
+      </div>
+      <div className="mt-3 grid grid-cols-5 text-[10px] text-[var(--faint)]">
+        {labels.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -158,152 +252,57 @@ function ActivityRow({
   item: ActivityItem;
   isNewest: boolean;
 }) {
-  const rowTone =
-    item.status === "blocked"
-      ? {
-          left: "border-l-[var(--danger)]",
-          amount: "text-[var(--danger)] terminal-value-danger",
-          tint: "bg-[rgba(255,59,59,0.05)]",
-        }
-      : item.status === "approved"
-        ? {
-            left: "border-l-[var(--accent)]",
-            amount: "text-[var(--accent)] terminal-value",
-            tint: "bg-[rgba(0,255,156,0.045)]",
-          }
-        : {
-            left: "border-l-[var(--warning)]",
-            amount: "text-[var(--warning)]",
-            tint: "bg-[rgba(255,176,32,0.045)]",
-          };
+  const statusClass =
+    item.status === "approved"
+      ? "text-[var(--accent)]"
+      : item.status === "blocked"
+        ? "text-[var(--danger)]"
+        : "text-[var(--warning)]";
 
   return (
-    <article
-      className={`border-b border-white/6 border-l-2 px-4 py-3 odd:bg-[rgba(255,255,255,0.015)] even:bg-[rgba(255,255,255,0.028)] ${rowTone.left} ${rowTone.tint} ${isNewest ? "stream-row" : ""}`}
-    >
-      <div className="grid gap-2 lg:grid-cols-[86px_112px_minmax(0,1.3fr)_100px_88px] lg:items-center lg:gap-3">
-        <span className="text-[11px] text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
-        <span className="truncate text-[11px] uppercase tracking-[0.08em] text-[var(--text)]">
+    <div className={`grid grid-cols-[80px_minmax(0,1fr)_88px_76px] gap-3 px-4 py-4 ${isNewest ? "feed-row-flash" : ""}`}>
+      <span className="text-[12px] text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
+      <div className="min-w-0">
+        <p className="truncate text-[13px] font-medium text-[var(--text)]">
           {item.merchant}
-        </span>
-        <span className="truncate text-[12px] text-[var(--text)]">
-          {formatShortEndpoint(item.endpoint)}
-        </span>
-        <span className={`text-right text-[13px] font-semibold ${rowTone.amount}`}>
-          {formatCurrency(item.amount)}
-        </span>
-        <div className="flex justify-end">
-          <StatusBadge status={item.status} />
-        </div>
+          <span className="ml-2 text-[12px] font-normal text-[var(--muted)]">
+            {formatShortEndpoint(item.endpoint)}
+          </span>
+        </p>
       </div>
-      <div className="mt-2 grid gap-1 lg:grid-cols-[1fr_auto] lg:items-center">
-        <span className="text-[11px] leading-5 text-[var(--muted)]">{item.reason}</span>
-        <span className="text-[10px] uppercase tracking-[0.11em] text-[var(--muted)]">
-          {item.complianceCost ? `x402 ${formatCurrency(item.complianceCost)}` : item.purpose}
-        </span>
-      </div>
-    </article>
-  );
-}
-
-function MiniSparkline({ values }: { values: number[] }) {
-  const max = Math.max(...values, 1);
-  const points = values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100;
-      const y = 100 - (value / max) * 84 - 8;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  const area = `0,100 ${points} 100,100`;
-
-  return (
-    <div className="terminal-panel h-[116px] px-4 py-3">
-      <div className="flex items-center justify-between">
-        <p className="terminal-label">Spend trace</p>
-        <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--muted)]">
-          <span className="status-pulse h-2 w-2 rounded-full bg-[var(--accent)]" />
-          Live
-        </span>
-      </div>
-      <div className="mt-3 h-[70px] w-full">
-        <svg
-          aria-hidden="true"
-          className="h-full w-full"
-          preserveAspectRatio="none"
-          viewBox="0 0 100 100"
-        >
-          <defs>
-            <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="rgba(0,255,156,0.34)" />
-              <stop offset="100%" stopColor="rgba(0,255,156,0.02)" />
-            </linearGradient>
-          </defs>
-          <path
-            d={`M ${area}`}
-            fill="url(#sparkFill)"
-            stroke="none"
-          />
-          <polyline
-            fill="none"
-            points={points}
-            stroke="var(--accent)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2.4"
-          />
-        </svg>
-      </div>
+      <span className="text-right text-[13px] font-medium text-[var(--text)]">
+        {formatCurrency(item.amount)}
+      </span>
+      <span className={`text-right text-[13px] font-medium ${statusClass}`}>
+        {item.status === "approved" ? "Approved" : item.status === "blocked" ? "Blocked" : "Checking"}
+      </span>
     </div>
   );
 }
 
 export default function Home() {
   const [policy, setPolicy] = useState<Policy>(initialPolicy);
-  const [allowlistDraft, setAllowlistDraft] = useState(initialPolicy.allowlist.join("\n"));
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [isAutoRunning, setIsAutoRunning] = useState(false);
+  const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
+  const [chartRange, setChartRange] = useState<ChartRange>("24H");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const requestIndex = useRef(0);
 
   const snapshot: SpendSnapshot = useMemo(
     () => ({
-      approvedSpend: activity
+      approvedSpend: activityLog
         .filter((item) => item.status === "approved")
         .reduce((sum, item) => sum + item.amount, 0),
-      attemptedCalls: activity.length,
-      blockedCalls: activity.filter((item) => item.status === "blocked").length,
+      attemptedCalls: activityLog.length,
+      blockedCalls: activityLog.filter((item) => item.status === "blocked").length,
     }),
-    [activity],
+    [activityLog],
   );
-
-  const updatePolicyNumber = (
-    key: keyof Pick<Policy, "perCallCap" | "dailySpendLimit" | "dailyCallLimit">,
-  ) => {
-    return (value: number) => {
-      setPolicy((current) => ({
-        ...current,
-        [key]: Number.isFinite(value) ? Math.max(0, value) : 0,
-      }));
-    };
-  };
-
-  const syncAllowlist = (value: string) => {
-    setAllowlistDraft(value);
-    setPolicy((current) => ({
-      ...current,
-      allowlist: value
-        .split("\n")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    }));
-  };
 
   const settleComplianceCheck = useCallback(
     async (request: CasperPaymentRequest) => {
       const result = await runMockX402ComplianceCheck(request);
 
-      setActivity((current) =>
+      setActivityLog((current) =>
         current.map((item) => {
           if (item.id !== request.id) {
             return item;
@@ -334,7 +333,7 @@ export default function Home() {
     const request = createMockPaymentRequest(requestIndex.current);
     requestIndex.current += 1;
 
-    setActivity((current) => {
+    setActivityLog((current) => {
       const liveSnapshot: SpendSnapshot = {
         approvedSpend: current
           .filter((item) => item.status === "approved")
@@ -354,261 +353,194 @@ export default function Home() {
         void settleComplianceCheck(request);
       }
 
-      return [nextItem, ...current].slice(0, 28);
+      return [nextItem, ...current];
     });
   }, [policy, settleComplianceCheck]);
 
-  useEffect(() => {
-    if (!isAutoRunning) {
-      return;
+  const visibleActivity = useMemo(() => activityLog.slice(0, 4), [activityLog]);
+  const checkingCount = activityLog.filter((item) => item.status === "checking").length;
+  const approvedCount = activityLog.filter((item) => item.status === "approved").length;
+  const remainingBudget = Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0);
+
+  const filteredActivity = visibleActivity.filter((item) => {
+    if (activityFilter === "all") {
+      return true;
     }
 
-    const timer = window.setInterval(firePayment, 1650);
-    return () => window.clearInterval(timer);
-  }, [firePayment, isAutoRunning]);
+    return item.status === activityFilter;
+  });
 
-  const checkingCount = activity.filter((item) => item.status === "checking").length;
-  const approvedCount = activity.filter((item) => item.status === "approved").length;
-  const latest = activity[0];
-  const sparkValues = useMemo(() => {
-    const recentApproved = activity
+  const chartSeries = useMemo(() => {
+    const base =
+      chartRange === "1H"
+        ? [0.12, 0.22, 0.18, 0.36, 0.29]
+        : chartRange === "24H"
+          ? [0.12, 0.22, 0.18, 0.36, 0.29]
+          : [0.08, 0.16, 0.28, 0.2, 0.38];
+
+    const liveSpend = activityLog
       .filter((item) => item.status === "approved")
-      .slice(0, 8)
+      .slice(0, 5)
       .reverse()
-      .map((item) => Math.max(item.amount, 0.15));
+      .map((item) => Math.max(item.amount / 3, 0.08));
 
-    return recentApproved.length
-      ? [...Array(Math.max(0, 8 - recentApproved.length)).fill(0.15), ...recentApproved]
-      : [0.2, 0.42, 0.26, 0.64, 0.36, 0.82, 0.48, 0.74];
-  }, [activity]);
+    return liveSpend.length
+      ? [...base.slice(0, Math.max(0, 5 - liveSpend.length)), ...liveSpend].slice(-5)
+      : base;
+  }, [activityLog, chartRange]);
+
+  const chartLabels =
+    chartRange === "1H"
+      ? ["09:00", "09:15", "09:30", "09:45", "10:00"]
+      : chartRange === "24H"
+        ? ["00:00", "06:00", "12:00", "18:00", "Now"]
+        : ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  const nextCheckLabel = checkingCount ? "Running" : "Idle";
 
   return (
-    <main className="terminal-shell min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <div className="terminal-grid-overlay pointer-events-none fixed inset-0 opacity-100" />
+    <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <div className="mx-auto max-w-[1180px] px-5 py-7 sm:px-6 lg:px-8">
+        <header className="pb-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[8px] bg-[rgba(34,197,94,0.14)] text-[var(--accent)]">
+                <ShieldCheckIcon />
+              </div>
+              <span className="text-[14px] font-semibold text-[var(--text)]">SentryAgent</span>
+            </div>
 
-      <header className="relative z-10 border-b border-white/8 bg-[rgba(3,3,4,0.9)]">
-        <div className="mx-auto max-w-[1680px] px-4 py-3 lg:px-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex flex-wrap items-center gap-[14px]">
+              <div className="flex items-center gap-2 rounded-[20px] border border-white/10 px-3 py-2 text-[12px] text-[var(--text)]">
+                <span className="text-[var(--accent)]">
+                  <BoltIcon />
+                </span>
+                <span>{formatCurrency(remainingBudget)} remaining</span>
+              </div>
+              <button
+                aria-label="Notifications"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-transparent text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+                type="button"
+              >
+                <BellIcon />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[11px] font-semibold text-[#08170C]">
+                  SA
+                </div>
+                <span className="font-mono text-[12px] text-[var(--muted)]">{formatWalletAddress()}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section className="mb-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="status-pulse h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--accent)]">
-                  SentryAgent // Casper wallet guardrail layer
-                </p>
-              </div>
-              <p className="mt-2 max-w-3xl text-[11px] uppercase tracking-[0.08em] text-[var(--muted)]">
-                LIVE POLICY ENGINE MONITORING X402 PAYMENT ATTEMPTS, DAILY VELOCITY, AND UNKNOWN
-                ENDPOINT COMPLIANCE BEFORE SPEND CLEARS.
+              <h1 className="text-[26px] font-semibold tracking-[-0.02em] text-[var(--text)]">
+                Spend policy monitor
+              </h1>
+              <p className="mt-2 max-w-[420px] text-[13px] leading-[1.5] text-[var(--muted)]">
+                Review simulated x402 payment requests against policy guardrails before any Casper wallet spend would be allowed through.
               </p>
+              <div className="mt-4 flex items-center gap-2">
+                <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.02)] text-[var(--muted)]">
+                  <CubeIcon />
+                </span>
+                <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[rgba(34,197,94,0.14)] text-[var(--accent)]">
+                  <BoltIcon />
+                </span>
+                <span className="ml-1 text-[10px] uppercase tracking-[0.04em] text-[var(--muted)]">
+                  CASPER · X402
+                </span>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(180px,1fr))]">
-              <SummaryMetric
-                detail="Approved outflow today"
-                label="Today's spend"
-                tone="accent"
-                value={formatCurrency(snapshot.approvedSpend)}
-              />
-              <SummaryMetric
-                detail={`Approved ${approvedCount} / attempted ${snapshot.attemptedCalls}`}
-                label="Calls made"
-                value={String(snapshot.attemptedCalls).padStart(2, "0")}
-              />
-              <SummaryMetric
-                detail={`${checkingCount} pending compliance checks`}
-                label="Calls blocked"
-                tone={snapshot.blockedCalls > 0 ? "danger" : "default"}
-                value={String(snapshot.blockedCalls).padStart(2, "0")}
-              />
-              <MiniSparkline values={sparkValues} />
-            </div>
+            <button
+              className="inline-flex h-11 items-center gap-2 rounded-[12px] bg-[var(--accent)] px-4 text-[13px] font-medium text-[#08170C] transition-opacity hover:opacity-90"
+              type="button"
+              onClick={firePayment}
+            >
+              <PlayIcon />
+              Fire request
+            </button>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <div className="relative z-10 mx-auto flex max-w-[1680px] flex-col lg:min-h-[calc(100vh-120px)] lg:flex-row">
-        <aside className="w-full border-b border-white/8 bg-[rgba(6,6,7,0.92)] lg:w-[318px] lg:flex-none lg:border-b-0 lg:border-r">
-          <div className="lg:sticky lg:top-0 lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
-            <section className="px-4 py-4 lg:px-5">
-              <div className="terminal-panel px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <p className="terminal-label">Policy rail</p>
-                  <span className="rounded-[4px] border border-[rgba(0,255,156,0.3)] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--accent)]">
-                    armed
-                  </span>
-                </div>
-                <h1 className="mt-3 text-[18px] font-semibold uppercase tracking-[0.03em] text-[var(--text)]">
-                  Runtime config
-                </h1>
-                <p className="mt-2 text-[11px] leading-5 text-[var(--muted)]">
-                  Spend thresholds, call ceilings, and trusted merchants routed through the same
-                  policy engine used by the simulator stream.
+        <section className="grid gap-[14px] lg:grid-cols-[minmax(0,1fr)_180px]">
+          <div className="glider-card rounded-[16px] px-5 py-[18px]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[12px] text-[var(--muted)]">Today&apos;s spend</p>
+                <p className="mt-2 text-[28px] font-semibold leading-none text-[var(--text)]">
+                  {formatCurrency(snapshot.approvedSpend)}
+                </p>
+                <p className="mt-2 text-[12px] text-[var(--accent)]">
+                  +{formatCurrency(snapshot.approvedSpend || 0.72)} today
                 </p>
               </div>
+              <SegmentTabs active={chartRange} options={chartRanges} onChange={setChartRange} />
+            </div>
 
-              <div className="terminal-panel mt-3 divide-y divide-white/8 px-4 py-1">
-                <RailField
-                  label="Per-call cap"
-                  min={0}
-                  prefix="$"
-                  step={0.05}
-                  value={policy.perCallCap}
-                  onChange={updatePolicyNumber("perCallCap")}
-                />
-                <RailField
-                  label="Daily spend limit"
-                  min={0}
-                  prefix="$"
-                  step={0.5}
-                  value={policy.dailySpendLimit}
-                  onChange={updatePolicyNumber("dailySpendLimit")}
-                />
-                <RailField
-                  label="Daily call limit"
-                  min={0}
-                  step={1}
-                  value={policy.dailyCallLimit}
-                  onChange={updatePolicyNumber("dailyCallLimit")}
-                />
-              </div>
-
-              <div className="terminal-panel mt-3 px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <span className="terminal-label">Endpoint allowlist</span>
-                  <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">
-                    {policy.allowlist.length} active
-                  </span>
-                </div>
-                <textarea
-                  className="terminal-textarea mt-3 min-h-56 w-full resize-none px-3 py-3 text-[11px] leading-6 text-[var(--text)] outline-none"
-                  value={allowlistDraft}
-                  onChange={(event) => syncAllowlist(event.target.value)}
-                />
-              </div>
-
-              <div className="terminal-panel mt-3 px-4 py-4">
-                <p className="terminal-label">Policy telemetry</p>
-                <div className="mt-3 grid gap-3">
-                  <div className="flex items-baseline justify-between border-b border-white/8 pb-2">
-                    <span className="text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
-                      Pending checks
-                    </span>
-                    <span className="terminal-value text-[18px] text-[var(--warning)]">
-                      {String(checkingCount).padStart(2, "0")}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between border-b border-white/8 pb-2">
-                    <span className="text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
-                      Remaining budget
-                    </span>
-                    <span className="terminal-value text-[18px] text-[var(--accent)]">
-                      {formatCurrency(Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0))}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[11px] uppercase tracking-[0.1em] text-[var(--muted)]">
-                      Latest merchant
-                    </span>
-                    <span className="max-w-[150px] truncate text-[12px] text-[var(--text)]">
-                      {latest ? latest.merchant : "none"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
+            <SpendChart labels={chartLabels} values={chartSeries} />
           </div>
-        </aside>
 
-        <section className="min-w-0 flex-1 bg-[rgba(1,1,2,0.88)]">
-          <div className="border-b border-white/8 px-4 py-4 lg:px-6">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-              <div className="terminal-panel px-4 py-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="terminal-label">Mock agent controls</span>
-                  <span className="inline-flex items-center gap-2 rounded-[4px] border border-[rgba(0,255,156,0.24)] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--accent)]">
-                    <span className="status-pulse h-2 w-2 rounded-full bg-[var(--accent)]" />
-                    {isAutoRunning ? "Looping" : "Standby"}
-                  </span>
+          <div className="grid gap-[10px]">
+            <StatCard label="CALLS MADE" suffix={`/${policy.dailyCallLimit}`} value={String(snapshot.attemptedCalls).padStart(2, "0")} />
+            <StatCard label="BLOCKED" value={String(snapshot.blockedCalls).padStart(2, "0")} />
+            <StatCard label="NEXT CHECK" value={nextCheckLabel} />
+          </div>
+        </section>
+
+        <section className="mt-5 grid gap-3 lg:grid-cols-3">
+          <PolicyCard
+            detail="Max per single payment."
+            icon={<BoltIcon />}
+            title={`Per-call cap: ${formatCurrency(policy.perCallCap)}`}
+          />
+          <PolicyCard
+            detail="Total approved spend allowed today."
+            icon={<ShieldCheckIcon />}
+            title={`Daily limit: ${formatCurrency(policy.dailySpendLimit)}`}
+          />
+          <PolicyCard
+            detail="Maximum number of calls per day."
+            icon={<CubeIcon />}
+            title={`Daily call count: ${policy.dailyCallLimit}`}
+          />
+        </section>
+
+        <section className="mt-6">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-[15px] font-semibold text-[var(--text)]">Live activity</h2>
+            <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
+          </div>
+
+          <div className="overflow-hidden rounded-[14px] border border-[rgba(255,255,255,0.07)] bg-[var(--card)]">
+            <div className="grid grid-cols-[80px_minmax(0,1fr)_88px_76px] gap-3 border-b border-[rgba(255,255,255,0.06)] px-4 py-3 text-[10px] uppercase tracking-[0.04em] text-[var(--muted)]">
+              <span>Time</span>
+              <span>Merchant</span>
+              <span className="text-right">Amount</span>
+              <span className="text-right">Status</span>
+            </div>
+
+            {filteredActivity.length ? (
+              filteredActivity.map((item, index) => (
+                <div
+                  className={index < filteredActivity.length - 1 ? "border-b border-[rgba(255,255,255,0.06)]" : ""}
+                  key={item.id}
+                >
+                  <ActivityRow isNewest={index === 0} item={item} />
                 </div>
-                <p className="mt-3 text-[11px] leading-5 text-[var(--muted)]">
-                  {latest
-                    ? `Last request: ${latest.merchant} attempted ${formatCurrency(latest.amount)} toward ${formatShortEndpoint(latest.endpoint)}.`
-                    : "Simulator idle. Trigger a payment attempt to bring the terminal online."}
+              ))
+            ) : (
+              <div className="px-4 py-10 text-center">
+                <p className="text-[13px] font-medium text-[var(--text)]">No activity yet</p>
+                <p className="mt-2 text-[13px] text-[var(--muted)]">
+                  Fire a request to stream simulated wallet spend decisions into the feed.
                 </p>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <ControlButton label="Fire request" onClick={firePayment} priority="primary" />
-                <ControlButton
-                  active={isAutoRunning}
-                  label={isAutoRunning ? "Pause loop" : "Auto loop"}
-                  onClick={() => setIsAutoRunning((value) => !value)}
-                />
-                <ControlButton label="Clear feed" onClick={() => setActivity([])} />
-              </div>
-            </div>
-          </div>
-
-          <div className="px-4 py-4 lg:px-6">
-            <section className="terminal-panel overflow-hidden">
-              <div className="border-b border-white/8 px-4 py-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <p className="terminal-label">Live activity stream</p>
-                      <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[var(--accent)]">
-                        <span className="status-pulse h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
-                        LIVE
-                        <span className="terminal-cursor text-[var(--accent)]">_</span>
-                      </span>
-                    </div>
-                    <h2 className="mt-3 text-[18px] font-semibold uppercase tracking-[0.03em] text-[var(--text)]">
-                      Transaction monitor
-                    </h2>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <div className="rounded-[4px] border border-[rgba(0,255,156,0.18)] bg-[rgba(0,255,156,0.05)] px-3 py-2 text-[10px] uppercase tracking-[0.1em] text-[var(--accent)]">
-                      approved path
-                    </div>
-                    <div className="rounded-[4px] border border-[rgba(255,59,59,0.18)] bg-[rgba(255,59,59,0.05)] px-3 py-2 text-[10px] uppercase tracking-[0.1em] text-[var(--danger)]">
-                      blocked path
-                    </div>
-                    <div className="rounded-[4px] border border-[rgba(255,176,32,0.18)] bg-[rgba(255,176,32,0.05)] px-3 py-2 text-[10px] uppercase tracking-[0.1em] text-[var(--warning)]">
-                      compliance check
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-[86px_112px_minmax(0,1.3fr)_100px_88px] gap-3 border-b border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-3 text-[10px] uppercase tracking-[0.12em] text-[var(--muted)] max-lg:hidden">
-                <span>Time</span>
-                <span>Merchant</span>
-                <span>Endpoint</span>
-                <span className="text-right">Amount</span>
-                <span className="text-right">Status</span>
-              </div>
-
-              <div className="max-h-[calc(100vh-305px)] overflow-y-auto">
-                {activity.length ? (
-                  activity.map((item, index) => (
-                    <ActivityRow item={item} isNewest={index === 0} key={item.id} />
-                  ))
-                ) : (
-                  <div className="flex min-h-[430px] items-center justify-center px-6 py-16">
-                    <div className="max-w-xl text-center">
-                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--accent)]">
-                        Awaiting traffic
-                        <span className="terminal-cursor ml-2">_</span>
-                      </p>
-                      <p className="mt-3 text-[11px] leading-6 text-[var(--muted)]">
-                        Live x402 payment attempts, policy decisions, and compliance lookups will
-                        stream here as soon as the mock agent begins emitting traffic.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            )}
           </div>
         </section>
       </div>
