@@ -399,8 +399,8 @@ export default function Home() {
   const nextCheckLabel = checkingCount ? "Running" : "Idle";
 
   return (
-    <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <div className="mx-auto max-w-[1180px] px-5 py-7 sm:px-6 lg:px-8">
+    <main className="min-h-screen w-full bg-[var(--bg)] text-[var(--text)]">
+      <div className="w-full px-5 py-7 sm:px-6 lg:px-8">
         <header className="pb-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
