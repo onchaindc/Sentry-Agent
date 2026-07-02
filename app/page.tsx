@@ -11,6 +11,7 @@ type ActivityStatus = "approved" | "blocked" | "checking";
 type ActivityFilter = "all" | "approved" | "blocked";
 type ChartRange = "1H" | "24H" | "7D";
 type PolicyField = "perCallCap" | "dailySpendLimit" | "dailyCallLimit";
+type ViewMode = "landing" | "app";
 type DecisionReasonCode =
   | "allowlisted"
   | "per_call_cap"
@@ -401,11 +402,11 @@ function StatCard({
   suffix?: string;
 }) {
   return (
-    <div className="glider-card rounded-[18px] px-5 py-5">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{label}</p>
+    <div className="glider-card rounded-[20px] px-6 py-6">
+      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
       <div className="mt-4 flex items-baseline gap-1">
-        <span className="text-[34px] font-semibold leading-none text-[var(--text)]">{value}</span>
-        {suffix ? <span className="text-[16px] text-[var(--muted)]">{suffix}</span> : null}
+        <span className="text-[40px] font-semibold leading-none text-[var(--text)]">{value}</span>
+        {suffix ? <span className="text-[18px] text-[var(--muted)]">{suffix}</span> : null}
       </div>
     </div>
   );
@@ -421,14 +422,14 @@ function SegmentTabs<T extends string>({
   onChange: (option: T) => void;
 }) {
   return (
-    <div className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] p-1">
+    <div className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] p-1.5">
       {options.map((option) => {
         const isActive = option === active;
 
         return (
           <button
             key={option}
-            className={`rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors ${
+            className={`rounded-full px-4 py-2 text-[12px] font-medium transition-colors ${
               isActive
                 ? "bg-[var(--surface-accent)] text-[var(--accent-strong)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -526,7 +527,7 @@ function EditablePolicyCard({
 
   return (
     <button
-      className="glider-card flex w-full items-center gap-4 rounded-[18px] px-5 py-5 text-left transition-colors hover:border-[var(--budget-border)]"
+      className="glider-card flex w-full items-center gap-4 rounded-[20px] px-6 py-6 text-left transition-colors hover:border-[var(--budget-border)]"
       type="button"
       onClick={() => {
         if (!isEditing) {
@@ -534,17 +535,17 @@ function EditablePolicyCard({
         }
       }}
     >
-      <div className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+      <div className="flex h-[42px] w-[42px] flex-none items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-medium text-[var(--text)]">{label}</p>
+        <p className="text-[17px] font-medium text-[var(--text)]">{label}</p>
         <div className="mt-2 flex items-center gap-2">
           {isEditing ? (
             <>
               <input
                 autoFocus
-                className="w-full rounded-[12px] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[15px] font-medium text-[var(--text)] outline-none"
+                className="w-full rounded-[12px] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2.5 text-[16px] font-medium text-[var(--text)] outline-none"
                 step={field === "dailyCallLimit" ? "1" : "0.01"}
                 type="number"
                 value={draftValue}
@@ -564,7 +565,7 @@ function EditablePolicyCard({
               />
               <button
                 aria-label={`Confirm ${label}`}
-                className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[var(--accent-strong)] transition-colors hover:bg-[var(--surface-soft)]"
+                className="flex h-9 w-9 items-center justify-center rounded-[10px] text-[var(--accent-strong)] transition-colors hover:bg-[var(--surface-soft)]"
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -575,7 +576,7 @@ function EditablePolicyCard({
               </button>
               <button
                 aria-label={`Cancel ${label}`}
-                className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
+                className="flex h-9 w-9 items-center justify-center rounded-[10px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
@@ -586,7 +587,7 @@ function EditablePolicyCard({
               </button>
             </>
           ) : (
-            <p className="text-[13px] leading-[1.5] text-[var(--muted)]">
+            <p className="text-[14px] leading-[1.6] text-[var(--muted)]">
               <span className="font-medium text-[var(--text)]">{formatPolicyValue(field, numericValue)}</span>
               <span className="ml-2">{detail}</span>
             </p>
@@ -613,26 +614,26 @@ function ActivityRow({
 
   return (
     <div
-      className={`grid grid-cols-[94px_minmax(0,1fr)_110px_96px] gap-4 px-5 py-4 sm:grid-cols-[120px_minmax(0,1fr)_120px_110px] ${
+      className={`grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 px-6 py-5 sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7 ${
         isNewest ? "feed-row-flash" : ""
       }`}
     >
-      <span className="text-[12px] text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
+      <span className="text-[13px] text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
       <div className="min-w-0">
-        <p className="truncate text-[14px] font-medium text-[var(--text)]">
+        <p className="truncate text-[16px] font-medium text-[var(--text)]">
           {item.merchant}
-          <span className="ml-2 text-[12px] font-normal text-[var(--muted)]">
+          <span className="ml-2 text-[13px] font-normal text-[var(--muted)]">
             {formatShortEndpoint(item.endpoint)}
           </span>
         </p>
         {item.status !== "approved" ? (
-          <p className="mt-1 truncate text-[11px] text-[var(--muted)]">{item.reason}</p>
+          <p className="mt-1 truncate text-[12px] text-[var(--muted)]">{item.reason}</p>
         ) : null}
       </div>
-      <span className="text-right text-[14px] font-medium text-[var(--text)]">
+      <span className="text-right text-[16px] font-medium text-[var(--text)]">
         {formatCurrency(item.amount)}
       </span>
-      <span className={`text-right text-[14px] font-medium ${statusClass}`}>
+      <span className={`text-right text-[16px] font-medium ${statusClass}`}>
         {item.status === "approved" ? "Approved" : item.status === "blocked" ? "Blocked" : "Checking"}
       </span>
     </div>
@@ -649,16 +650,73 @@ function MetricTile({
   detail: string;
 }) {
   return (
-    <div className="glider-card rounded-[18px] px-5 py-5">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--faint)]">{label}</p>
-      <p className="mt-4 text-[34px] font-semibold leading-none text-[var(--text)]">{value}</p>
-      <p className="mt-3 text-[13px] text-[var(--muted)]">{detail}</p>
+    <div className="glider-card rounded-[20px] px-6 py-6">
+      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
+      <p className="mt-4 text-[40px] font-semibold leading-none text-[var(--text)]">{value}</p>
+      <p className="mt-3 text-[15px] leading-[1.6] text-[var(--muted)]">{detail}</p>
     </div>
+  );
+}
+
+function AppChrome({
+  theme,
+  remainingBudget,
+  onToggleTheme,
+}: {
+  theme: ThemeMode;
+  remainingBudget: number;
+  onToggleTheme: () => void;
+}) {
+  return (
+    <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-4">
+        <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+          <ShieldCheckIcon />
+        </div>
+        <div>
+          <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
+          <p className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)]">
+            Casper autonomous wallet defense
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex h-12 items-center gap-2 rounded-full border border-[var(--budget-border)] bg-[var(--panel)] px-5 text-[15px] text-[var(--text)]">
+          <span className="text-[var(--accent-strong)]">
+            <BoltIcon />
+          </span>
+          <span>{formatCurrency(remainingBudget)} remaining</span>
+        </div>
+        <button
+          aria-label="Notifications"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          type="button"
+        >
+          <BellIcon />
+        </button>
+        <button
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          type="button"
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>
+        <div className="flex h-12 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[12px] font-semibold text-[var(--button-ink)]">
+            SA
+          </div>
+          <span className="pr-2 font-mono text-[13px] text-[var(--muted)]">{formatWalletAddress()}</span>
+        </div>
+      </div>
+    </header>
   );
 }
 
 export default function Home() {
   const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [viewMode, setViewMode] = useState<ViewMode>("landing");
   const [policy, setPolicy] = useState<Policy>(initialPolicy);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [chartRange, setChartRange] = useState<ChartRange>("24H");
@@ -824,158 +882,112 @@ export default function Home() {
       data-theme={theme}
       style={themeVars[theme]}
     >
-      <div className="hero-shell relative overflow-hidden border-b border-[var(--divider)]">
-        <div className="hero-orb pointer-events-none absolute right-[-120px] top-[80px] h-[320px] w-[320px] rounded-full blur-3xl" />
-        <div className="relative mx-auto w-full max-w-[1600px] px-5 py-7 sm:px-8 lg:px-10 xl:px-12">
-          <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[10px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-                <ShieldCheckIcon />
+      {viewMode === "landing" ? (
+        <div className="hero-shell relative min-h-screen overflow-hidden">
+          <div className="hero-orb pointer-events-none absolute right-[-120px] top-[80px] h-[320px] w-[320px] rounded-full blur-3xl" />
+          <div className="relative mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-5 py-7 sm:px-8 lg:px-10 xl:px-12">
+            <header className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+                  <ShieldCheckIcon />
+                </div>
+                <div>
+                  <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
+                  <p className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)]">
+                    Casper autonomous wallet defense
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[16px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted)]">
-                  Casper autonomous wallet defense
-                </p>
-              </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 rounded-full border border-[var(--budget-border)] bg-[var(--panel)] px-4 py-2 text-[13px] text-[var(--text)]">
-                <span className="text-[var(--accent-strong)]">
-                  <BoltIcon />
-                </span>
-                <span>{formatCurrency(remainingBudget)} remaining</span>
-              </div>
-              <button
-                aria-label="Notifications"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-                type="button"
-              >
-                <BellIcon />
-              </button>
               <button
                 aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
                 type="button"
                 onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
               >
                 {theme === "dark" ? <SunIcon /> : <MoonIcon />}
               </button>
-              <div className="flex items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--panel)] px-2 py-1.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--accent)] text-[11px] font-semibold text-[var(--button-ink)]">
-                  SA
-                </div>
-                <span className="pr-2 font-mono text-[12px] text-[var(--muted)]">{formatWalletAddress()}</span>
-              </div>
-            </div>
-          </header>
+            </header>
 
-          <section className="relative grid gap-12 pb-14 pt-14 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:items-center xl:gap-16 xl:pt-20">
-            <div className="max-w-[780px]">
+            <section className="relative flex flex-1 flex-col items-center justify-center py-16 text-center">
               <div className="mb-8 inline-flex items-center gap-3 text-[12px] uppercase tracking-[0.18em] text-[var(--muted)]">
                 <span className="h-px w-10 bg-[var(--hero-line)]" />
                 Spend-policy guardrail layer for AI wallets on Casper
+                <span className="h-px w-10 bg-[var(--hero-line)]" />
               </div>
-              <h1 className="max-w-[900px] text-[54px] font-semibold leading-[0.95] tracking-[-0.05em] text-[var(--text)] sm:text-[72px] lg:text-[92px] xl:text-[108px]">
+              <h1 className="mx-auto max-w-[1040px] text-[58px] font-semibold leading-[0.95] tracking-[-0.055em] text-[var(--text)] sm:text-[78px] lg:text-[112px] xl:text-[132px]">
                 Block risky wallet spend before funds move.
               </h1>
-              <p className="mt-8 max-w-[720px] text-[18px] leading-[1.65] text-[var(--muted)] sm:text-[20px]">
+              <p className="mt-8 max-w-[860px] text-[20px] leading-[1.7] text-[var(--muted)] sm:text-[22px]">
                 SentryAgent sits between autonomous agents and x402-powered Casper wallets, enforcing
                 spend caps, daily velocity rules, allowlists, and live compliance checks before payment
                 requests get approved.
               </p>
-              <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
-                <button
-                  className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[var(--text)] px-7 text-[15px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90"
-                  type="button"
-                  onClick={firePayment}
-                >
-                  <PlayIcon />
-                  Launch live simulation
-                </button>
-                <a
-                  className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-7 text-[15px] font-medium text-[var(--text)] transition-colors hover:border-[var(--budget-border)]"
-                  href="#monitor"
-                >
-                  View monitoring console
-                  <ArrowRightIcon />
-                </a>
-              </div>
-              <div className="mt-10 flex flex-wrap items-center gap-5 text-[13px] text-[var(--muted)]">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]">
+              <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-[15px] text-[var(--muted)]">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]">
                     <CubeIcon />
                   </span>
                   <span>Casper AI toolkit ready</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
                     <BoltIcon />
                   </span>
                   <span>x402 spend evaluation in real time</span>
                 </div>
               </div>
+            </section>
+
+            <div className="flex justify-center pb-10">
+              <button
+                className="inline-flex h-16 items-center justify-center gap-3 rounded-full bg-[var(--text)] px-9 text-[17px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90"
+                type="button"
+                onClick={() => setViewMode("app")}
+              >
+                <PlayIcon />
+                Launch app
+              </button>
             </div>
-
-            <div className="glider-card rounded-[30px] p-5 sm:p-6 xl:p-7">
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
-                <div className="rounded-[24px] border border-[var(--divider)] bg-[var(--card-elevated)] p-5 sm:p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)]">Today&apos;s spend</p>
-                      <p className="mt-4 text-[40px] font-semibold leading-none text-[var(--text)] sm:text-[48px]">
-                        {formatCurrency(snapshot.approvedSpend)}
-                      </p>
-                      <p className="mt-3 text-[13px] text-[var(--accent-strong)]">
-                        +{formatCurrency(snapshot.approvedSpend || 0.72)} moving through approved paths
-                      </p>
-                    </div>
-                    <SegmentTabs active={chartRange} options={chartRanges} onChange={setChartRange} />
-                  </div>
-
-                  <SpendChart labels={chartLabels} values={chartSeries} />
-                </div>
-
-                <div className="grid gap-4">
-                  <StatCard
-                    label="CALLS MADE"
-                    suffix={`/${policy.dailyCallLimit}`}
-                    value={String(snapshot.attemptedCalls).padStart(2, "0")}
-                  />
-                  <StatCard label="BLOCKED" value={String(snapshot.blockedCalls).padStart(2, "0")} />
-                  <StatCard label="NEXT CHECK" value={nextCheckLabel} />
-                </div>
-              </div>
-            </div>
-          </section>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div>
+          <div className="hero-shell relative overflow-hidden border-b border-[var(--divider)]">
+            <div className="hero-orb pointer-events-none absolute right-[-120px] top-[80px] h-[320px] w-[320px] rounded-full blur-3xl" />
+            <div className="relative mx-auto w-full max-w-[1600px] px-5 py-7 sm:px-8 lg:px-10 xl:px-12">
+              <AppChrome
+                remainingBudget={remainingBudget}
+                theme={theme}
+                onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              />
+            </div>
+          </div>
 
-      <div id="monitor" className="mx-auto w-full max-w-[1600px] px-5 py-8 sm:px-8 lg:px-10 xl:px-12">
+          <div id="monitor" className="mx-auto w-full max-w-[1600px] px-5 py-8 sm:px-8 lg:px-10 xl:px-12">
         <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <div className="glider-card rounded-[22px] px-6 py-6 sm:px-7 sm:py-7">
+          <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-[720px]">
-                <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)]">Live monitor</p>
-                <h2 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[42px]">
+                <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Live monitor</p>
+                <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
                   Watch every attempted spend move through policy.
                 </h2>
-                <p className="mt-4 text-[15px] leading-[1.7] text-[var(--muted)] sm:text-[16px]">
+                <p className="mt-5 text-[17px] leading-[1.8] text-[var(--muted)] sm:text-[18px]">
                   Approved requests pass instantly, unknown endpoints trigger compliance, and blocked
                   spends surface with human-readable reasoning for the operator.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button
-                  className="inline-flex h-12 items-center gap-2 rounded-full bg-[var(--accent)] px-5 text-[14px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90"
+                  className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90"
                   type="button"
                   onClick={firePayment}
                 >
                   <PlayIcon />
                   Fire request
                 </button>
-                <div className="inline-flex h-12 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-5 text-[13px] text-[var(--muted)]">
+                <div className="inline-flex h-14 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-6 text-[15px] text-[var(--muted)]">
                   <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
                   Mock agent online
                 </div>
@@ -983,22 +995,22 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="glider-card rounded-[22px] px-6 py-6 sm:px-7 sm:py-7">
-            <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)]">Guarded agent</p>
-            <div className="mt-5 flex items-start gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+          <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+            <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Guarded agent</p>
+            <div className="mt-6 flex items-start gap-5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
                 <RobotIcon />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[16px] font-medium text-[var(--text)]">Arbitrage Scanner Bot</p>
-                <p className="mt-2 text-[13px] leading-[1.6] text-[var(--muted)]">
+                <p className="text-[20px] font-medium text-[var(--text)]">Arbitrage Scanner Bot</p>
+                <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
                   Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
                 </p>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[12px] font-semibold text-[var(--button-ink)]">
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
                     AR
                   </div>
-                  <span className="font-mono text-[12px] text-[var(--muted)]">0x82A4..4F1C</span>
+                  <span className="font-mono text-[14px] text-[var(--muted)]">0x82A4..4F1C</span>
                 </div>
               </div>
             </div>
@@ -1074,18 +1086,18 @@ export default function Home() {
           />
         </section>
 
-        <section className="rounded-[22px] border border-[var(--border)] bg-[var(--card)]">
-          <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
+          <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-[12px] uppercase tracking-[0.18em] text-[var(--muted)]">Activity feed</p>
-              <h3 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+              <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Activity feed</p>
+              <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
                 Live activity stream
               </h3>
             </div>
             <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
           </div>
 
-          <div className="grid grid-cols-[94px_minmax(0,1fr)_110px_96px] gap-4 border-b border-[var(--divider)] px-5 py-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[120px_minmax(0,1fr)_120px_110px] sm:px-6">
+          <div className="grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 border-b border-[var(--divider)] px-6 py-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7">
             <span>Time</span>
             <span>Merchant</span>
             <span className="text-right">Amount</span>
@@ -1112,6 +1124,8 @@ export default function Home() {
           )}
         </section>
       </div>
+        </div>
+      )}
     </main>
   );
 }
