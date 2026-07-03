@@ -1,0 +1,9 @@
+.idea
+.vscode
+/target
+Cargo.lock
+.backend*
+.builder*
+/wasm
+/work-test*.log
+.env
