@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicKeyBalance, runRealCasperCheckAndRecordForAgent } from "@/lib/casper-server";
+import { getPublicKeyBalance, submitSignedTransferDeploy } from "@/lib/casper-server";
 import { getUserRecord } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -8,15 +8,15 @@ export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as {
       userPublicKey?: string;
-      amount?: number;
+      signedDeployJson?: string;
     };
 
     if (!payload.userPublicKey?.trim()) {
       return NextResponse.json({ error: "A connected wallet public key is required." }, { status: 400 });
     }
 
-    if (typeof payload.amount !== "number" || Number.isNaN(payload.amount) || payload.amount <= 0) {
-      return NextResponse.json({ error: "A positive amount is required." }, { status: 400 });
+    if (!payload.signedDeployJson?.trim()) {
+      return NextResponse.json({ error: "Signed deploy payload is required." }, { status: 400 });
     }
 
     const record = await getUserRecord(payload.userPublicKey);
@@ -24,18 +24,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User session not found." }, { status: 404 });
     }
 
-    const result = await runRealCasperCheckAndRecordForAgent(
-      payload.amount,
-      record.agent.privateKeyPem,
-    );
-    const agentBalanceCspr = await getPublicKeyBalance(record.agent.publicKey).catch(() => undefined);
+    const result = await submitSignedTransferDeploy(payload.signedDeployJson);
+    const agentBalanceCspr = await getPublicKeyBalance(record.agent.publicKey);
 
     return NextResponse.json({
-      ...result,
+      deployHash: result.deployHash,
       agentBalanceCspr,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown Casper execution error.";
+    const message = error instanceof Error ? error.message : "Failed to submit signed funding deploy.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

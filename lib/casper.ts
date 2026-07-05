@@ -1,3 +1,5 @@
+import type { Policy } from "./policy";
+
 export type CasperPaymentRequest = {
   id: string;
   endpoint: string;
@@ -7,11 +9,53 @@ export type CasperPaymentRequest = {
   purpose: string;
 };
 
+export type ActivityStatus = "approved" | "blocked" | "checking";
+export type DecisionReasonCode =
+  | "allowlisted"
+  | "per_call_cap"
+  | "daily_spend_limit"
+  | "daily_call_limit"
+  | "checking_unknown_endpoint"
+  | "compliance_failed"
+  | "post_check_daily_limit"
+  | "compliance_cleared";
+
+export type ActivityItem = CasperPaymentRequest & {
+  status: ActivityStatus;
+  reason: string;
+  reasonCode: DecisionReasonCode;
+  checkedAt?: number;
+  complianceCost?: number;
+  source?: "mock" | "casper";
+  deployHash?: string;
+};
+
 export type CasperCheckAndRecordResult = {
   status: "approved" | "blocked";
   deployHash: string;
   eventName?: string;
   onchainAmount: string;
+  agentBalanceCspr?: number;
+};
+
+export type UserAgentSession = {
+  userPublicKey: string;
+  agentPublicKey: string;
+  agentAccountHash: string;
+  agentBalanceCspr: number;
+  policy: Policy;
+  activity: ActivityItem[];
+};
+
+export type FundingPrepareResponse = {
+  deployJson: unknown;
+  agentPublicKey: string;
+  amountCspr: string;
+};
+
+export type FundingSubmitResponse = {
+  deployHash: string;
+  agentBalanceCspr: number;
 };
 
 const merchants = [
@@ -69,24 +113,49 @@ export async function getMockWalletBalance() {
   };
 }
 
-export async function checkAndRecordOnCasper(request: CasperPaymentRequest) {
-  const response = await fetch("/api/casper/check-and-record", {
+async function postJson<T>(url: string, body: Record<string, unknown>) {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      paymentRequestId: request.id,
-      amount: request.amount,
-      endpoint: request.endpoint,
-      merchant: request.merchant,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(payload?.error ?? "Failed to call Casper testnet.");
+    throw new Error(payload?.error ?? "Request failed.");
   }
 
-  return (await response.json()) as CasperCheckAndRecordResult;
+  return (await response.json()) as T;
+}
+
+export async function ensureUserSession(userPublicKey: string) {
+  return postJson<UserAgentSession>("/api/user/session", { userPublicKey });
+}
+
+export async function persistUserPolicy(userPublicKey: string, policy: Policy) {
+  return postJson<UserAgentSession>("/api/policy", { userPublicKey, policy });
+}
+
+export async function persistUserActivity(userPublicKey: string, activity: ActivityItem[]) {
+  return postJson<UserAgentSession>("/api/activity", { userPublicKey, activity });
+}
+
+export async function prepareAgentFunding(userPublicKey: string, amountCspr: string) {
+  return postJson<FundingPrepareResponse>("/api/funding/prepare", { userPublicKey, amountCspr });
+}
+
+export async function submitAgentFunding(userPublicKey: string, signedDeployJson: string) {
+  return postJson<FundingSubmitResponse>("/api/funding/submit", { userPublicKey, signedDeployJson });
+}
+
+export async function checkAndRecordOnCasper(userPublicKey: string, request: CasperPaymentRequest) {
+  return postJson<CasperCheckAndRecordResult>("/api/casper/check-and-record", {
+    userPublicKey,
+    paymentRequestId: request.id,
+    amount: request.amount,
+    endpoint: request.endpoint,
+    merchant: request.merchant,
+  });
 }

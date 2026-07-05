@@ -7,6 +7,17 @@ export type Policy = {
   allowlist: string[];
 };
 
+export const defaultPolicy: Policy = {
+  perCallCap: 2,
+  dailySpendLimit: 9.5,
+  dailyCallLimit: 18,
+  allowlist: [
+    "https://api.cspr.cloud/v1",
+    "https://oracledock.dev",
+    "https://marketpulse.exchange/quotes",
+  ],
+};
+
 export type SpendSnapshot = {
   approvedSpend: number;
   attemptedCalls: number;

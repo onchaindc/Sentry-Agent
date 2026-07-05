@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import type * as CasperSdk from "casper-js-sdk";
+import type { AgentRecord } from "./user-store";
 
 const require = createRequire(import.meta.url);
 const {
@@ -13,17 +13,22 @@ const {
   HttpHandler,
   KeyAlgorithm,
   PrivateKey,
+  PublicKey,
+  PurseIdentifier,
   RpcClient,
   StoredContractByHash,
+  makeCsprTransferDeploy,
 } = require("casper-js-sdk") as typeof CasperSdk;
 
 const CASPER_RPC_URL = "https://node.testnet.casper.network/rpc";
 const CASPER_CHAIN_NAME = "casper-test";
 const SPEND_GUARDRAIL_CONTRACT_HASH =
   "contract-808477e815f794497a8f18b62d6ec5b70cfdf4c20da4335c65d3562122c89fe8";
-const STANDARD_PAYMENT_AMOUNT = "3000000000";
+const CONTRACT_PAYMENT_AMOUNT = "100000000";
+const TRANSFER_PAYMENT_AMOUNT = "100000000";
 const EVENT_LENGTH_KEY = "__events_length";
 const EVENTS_DICT_KEY = "__events";
+const CSPR_MOTES = BigInt("1000000000");
 
 type RpcEnvelope<T> =
   | {
@@ -61,6 +66,7 @@ export type RealCasperCheckResult = {
   deployHash: string;
   eventName?: string;
   onchainAmount: string;
+  agentBalanceCspr?: number;
 };
 
 function stripContractPrefix(contractHash: string) {
@@ -69,6 +75,40 @@ function stripContractPrefix(contractHash: string) {
 
 function dollarsToCents(amount: number) {
   return String(Math.round(amount * 100));
+}
+
+function centsToWholeAmountString(value: string) {
+  return value.replace(/^0+(?=\d)/, "");
+}
+
+function normalizeCsprAmount(value: string | number) {
+  const raw = String(value).trim();
+
+  if (!raw || !/^\d+(\.\d{1,9})?$/.test(raw)) {
+    throw new Error("Amount must be a positive CSPR value with up to 9 decimals.");
+  }
+
+  return raw;
+}
+
+function csprToMotes(value: string | number) {
+  const normalized = normalizeCsprAmount(value);
+  const [wholePart, fractionalPart = ""] = normalized.split(".");
+  const whole = BigInt(wholePart || "0");
+  const fractional = BigInt((fractionalPart + "000000000").slice(0, 9));
+  return (whole * CSPR_MOTES + fractional).toString();
+}
+
+function motesToCspr(value: string) {
+  const motes = BigInt(value);
+  const whole = motes / CSPR_MOTES;
+  const fraction = motes % CSPR_MOTES;
+
+  if (fraction === BigInt(0)) {
+    return Number(whole);
+  }
+
+  return Number(`${whole}.${fraction.toString().padStart(9, "0").replace(/0+$/, "")}`);
 }
 
 async function rpcRequest<T>(method: string, params?: Record<string, unknown>) {
@@ -118,6 +158,14 @@ async function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getClient() {
+  return new RpcClient(new HttpHandler(CASPER_RPC_URL));
+}
+
+function loadPrivateKey(pem: string) {
+  return PrivateKey.fromPem(pem, KeyAlgorithm.SECP256K1);
+}
+
 async function getLatestStateRootHash() {
   const payload = await rpcRequest<{
     block_with_signatures?: {
@@ -160,7 +208,6 @@ async function queryUrefValue(uref: string) {
     stored_value?: {
       CLValue?: {
         parsed?: number | string;
-        bytes?: string;
       };
     };
   }>("query_global_state", {
@@ -175,11 +222,9 @@ async function queryUrefValue(uref: string) {
 async function readEventDictionaryItem(seedUref: string, dictionaryKey: string) {
   const stateRootHash = await getLatestStateRootHash();
   const payload = await rpcRequest<{
-    dictionary_key?: string;
     stored_value?: {
       CLValue?: {
         bytes?: string;
-        parsed?: unknown;
       };
     };
   }>("state_get_dictionary_item", {
@@ -228,11 +273,7 @@ function extractExecutionFailure(result: DeployExecutionResult | undefined) {
     return false;
   }
 
-  if (result.error_message) {
-    return true;
-  }
-
-  if (result.Version2?.error_message) {
+  if (result.error_message || result.Version2?.error_message) {
     return true;
   }
 
@@ -249,6 +290,7 @@ async function waitForDeployResult(deployHash: string) {
       }>("info_get_deploy", {
         deploy_hash: deployHash,
       });
+
       const executionResult =
         payload.executionResults?.[0] ?? payload.execution_results?.[0] ?? payload.execution_info;
 
@@ -264,89 +306,96 @@ async function waitForDeployResult(deployHash: string) {
     await wait(4000);
   }
 
-  throw new Error(`Timed out waiting for deploy ${deployHash} to execute.`);
+  throw new Error(`Timed out waiting for Casper deploy ${deployHash}.`);
 }
 
-async function loadSigningKey() {
-  const secretKeyPath = process.env.ODRA_CASPER_LIVENET_SECRET_KEY_PATH;
+export async function createAgentWallet(): Promise<AgentRecord> {
+  const privateKey = PrivateKey.generate(KeyAlgorithm.SECP256K1);
+  const publicKey = privateKey.publicKey;
 
-  if (!secretKeyPath) {
-    throw new Error("ODRA_CASPER_LIVENET_SECRET_KEY_PATH is not set.");
-  }
-
-  const pem = await readFile(secretKeyPath, "utf8");
-  return PrivateKey.fromPem(pem, KeyAlgorithm.SECP256K1);
+  return {
+    publicKey: publicKey.toHex(),
+    accountHash: publicKey.accountHash().toPrefixedString(),
+    privateKeyPem: privateKey.toPem(),
+    algorithm: "secp256k1",
+  };
 }
 
-export async function runRealCasperCheckAndRecord(amount: number): Promise<RealCasperCheckResult> {
-  const onchainAmount = dollarsToCents(amount);
-  const signingKey = await loadSigningKey();
-  const client = new RpcClient(new HttpHandler(CASPER_RPC_URL, "fetch"));
-  const eventStateBefore = await getEventState();
+export async function getPublicKeyBalance(publicKeyHex: string) {
+  const client = getClient();
+  const balance = await client.queryLatestBalance(PurseIdentifier.fromPublicKey(PublicKey.fromHex(publicKeyHex)));
+  return motesToCspr(balance.balance.toString());
+}
+
+export async function buildFundingTransferDeploy(userPublicKeyHex: string, agentPublicKeyHex: string, amountCspr: string) {
+  const deploy = makeCsprTransferDeploy({
+    senderPublicKeyHex: userPublicKeyHex,
+    recipientPublicKeyHex: agentPublicKeyHex,
+    transferAmount: csprToMotes(amountCspr),
+    paymentAmount: TRANSFER_PAYMENT_AMOUNT,
+    chainName: CASPER_CHAIN_NAME,
+  });
+
+  return Deploy.toJSON(deploy);
+}
+
+export async function submitSignedTransferDeploy(signedDeployJson: string) {
+  const parsed = JSON.parse(signedDeployJson);
+  const deploy = Deploy.fromJSON(parsed);
+  const client = getClient();
+  const putResult = await client.putDeploy(deploy);
+  const deployHash = putResult.deployHash.toHex();
+
+  await waitForDeployResult(deployHash);
+
+  return {
+    deployHash,
+  };
+}
+
+export async function runRealCasperCheckAndRecordForAgent(
+  amount: number,
+  agentPrivateKeyPem: string,
+): Promise<RealCasperCheckResult> {
+  const signer = loadPrivateKey(agentPrivateKeyPem);
+  const beforeEvents = await getEventState();
 
   const deployHeader = DeployHeader.default();
-  deployHeader.account = signingKey.publicKey;
+  deployHeader.account = signer.publicKey;
   deployHeader.chainName = CASPER_CHAIN_NAME;
-  deployHeader.gasPrice = 1;
 
   const session = new ExecutableDeployItem();
   session.storedContractByHash = new StoredContractByHash(
     ContractHash.newContract(stripContractPrefix(SPEND_GUARDRAIL_CONTRACT_HASH)),
     "check_and_record",
     Args.fromMap({
-      amount: CLValue.newCLUInt512(onchainAmount),
+      amount: CLValue.newCLUInt512(centsToWholeAmountString(dollarsToCents(amount))),
     }),
   );
 
-  const payment = ExecutableDeployItem.standardPayment(STANDARD_PAYMENT_AMOUNT);
+  const payment = ExecutableDeployItem.standardPayment(CONTRACT_PAYMENT_AMOUNT);
   const deploy = Deploy.makeDeploy(deployHeader, payment, session);
-  deploy.sign(signingKey);
+  deploy.sign(signer);
 
+  const client = getClient();
   const putResult = await client.putDeploy(deploy);
-  const deployHash =
-    "deployHash" in putResult && putResult.deployHash ? putResult.deployHash.toHex() : undefined;
-
-  if (!deployHash) {
-    throw new Error("Casper RPC did not return a deploy hash.");
-  }
-
+  const deployHash = putResult.deployHash.toHex();
   const executionResult = await waitForDeployResult(deployHash);
-  if (extractExecutionFailure(executionResult)) {
-    return {
-      status: "blocked",
-      deployHash,
-      onchainAmount,
-    };
-  }
+  const blocked = extractExecutionFailure(executionResult);
 
   let eventName: string | undefined;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const eventStateAfter = await getEventState();
-    if (eventStateAfter.length > eventStateBefore.length) {
-      const latestEventBytes = await readEventDictionaryItem(
-        eventStateAfter.eventsDictUref,
-        String(eventStateAfter.length - 1),
-      );
-      eventName = decodeEventName(latestEventBytes);
-      break;
-    }
+  const afterEvents = await getEventState();
 
-    await wait(2000);
-  }
-
-  if (eventName === "event_BlockedSpend") {
-    return {
-      status: "blocked",
-      deployHash,
-      eventName,
-      onchainAmount,
-    };
+  if (afterEvents.length > beforeEvents.length) {
+    eventName = decodeEventName(
+      await readEventDictionaryItem(afterEvents.eventsDictUref, String(afterEvents.length - 1)),
+    );
   }
 
   return {
-    status: "approved",
+    status: blocked ? "blocked" : "approved",
     deployHash,
     eventName,
-    onchainAmount,
+    onchainAmount: dollarsToCents(amount),
   };
 }

@@ -1,53 +1,42 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   checkAndRecordOnCasper,
   createMockPaymentRequest,
+  ensureUserSession,
+  persistUserActivity,
+  persistUserPolicy,
+  prepareAgentFunding,
+  submitAgentFunding,
+  type ActivityItem,
+  type ActivityStatus,
   type CasperPaymentRequest,
+  type DecisionReasonCode,
+  type UserAgentSession,
 } from "@/lib/casper";
-import { evaluatePaymentRequest, type Policy, type SpendSnapshot } from "@/lib/policy";
+import { defaultPolicy, evaluatePaymentRequest, type Policy, type SpendSnapshot } from "@/lib/policy";
 import { runMockX402ComplianceCheck } from "@/lib/x402";
 
 type ThemeMode = "dark" | "light";
-type ActivityStatus = "approved" | "blocked" | "checking";
 type ActivityFilter = "all" | "approved" | "blocked";
 type ChartRange = "1H" | "24H" | "7D";
 type PolicyField = "perCallCap" | "dailySpendLimit" | "dailyCallLimit";
 type ViewMode = "landing" | "app";
-type DecisionReasonCode =
-  | "allowlisted"
-  | "per_call_cap"
-  | "daily_spend_limit"
-  | "daily_call_limit"
-  | "checking_unknown_endpoint"
-  | "compliance_failed"
-  | "post_check_daily_limit"
-  | "compliance_cleared";
-
-type ActivityItem = CasperPaymentRequest & {
-  status: ActivityStatus;
-  reason: string;
-  reasonCode: DecisionReasonCode;
-  checkedAt?: number;
-  complianceCost?: number;
-  source?: "mock" | "casper";
-  deployHash?: string;
-};
-
 type ThemeVars = CSSProperties & Record<`--${string}`, string>;
 
-const initialPolicy: Policy = {
-  perCallCap: 2,
-  dailySpendLimit: 9.5,
-  dailyCallLimit: 18,
-  allowlist: [
-    "https://api.cspr.cloud/v1",
-    "https://oracledock.dev",
-    "https://marketpulse.exchange/quotes",
-  ],
-};
+declare global {
+  interface Window {
+    CasperWalletProvider?: {
+      requestConnection: () => Promise<boolean>;
+      isConnected?: () => Promise<boolean>;
+      getActivePublicKey: () => Promise<string>;
+      disconnectFromSite?: () => Promise<void>;
+      sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+    };
+  }
+}
 
 const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
 const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
@@ -124,6 +113,13 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function formatBalance(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: value < 1 ? 3 : 2,
+    maximumFractionDigits: 3,
+  }).format(value);
+}
+
 function formatPolicyValue(field: PolicyField, value: number) {
   return field === "dailyCallLimit" ? String(Math.round(value)) : formatCurrency(value);
 }
@@ -141,8 +137,12 @@ function formatShortEndpoint(endpoint: string) {
   return endpoint.replace("https://", "").replace("http://", "");
 }
 
-function formatWalletAddress() {
-  return "0x82..4F1";
+function shortPublicKey(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
 }
 
 function shortDeployHash(hash: string) {
@@ -245,6 +245,14 @@ function createReason(
     default:
       return "Policy evaluation completed.";
   }
+}
+
+function getWalletProvider() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.CasperWalletProvider ?? null;
 }
 
 function ShieldCheckIcon() {
@@ -388,37 +396,83 @@ function RobotIcon() {
   );
 }
 
-function ArrowRightIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-      <path
-        d="M5 12h14m-5-5 5 5-5 5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.8"
-      />
-    </svg>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  suffix,
+function AppChrome({
+  theme,
+  remainingBudget,
+  walletLabel,
+  isConnectingWallet,
+  isWalletConnected,
+  onToggleTheme,
+  onConnectWallet,
+  onDisconnectWallet,
 }: {
-  label: string;
-  value: string;
-  suffix?: string;
+  theme: ThemeMode;
+  remainingBudget: number;
+  walletLabel: string;
+  isConnectingWallet: boolean;
+  isWalletConnected: boolean;
+  onToggleTheme: () => void;
+  onConnectWallet: () => void;
+  onDisconnectWallet: () => void;
 }) {
   return (
-    <div className="glider-card rounded-[20px] px-6 py-6">
-      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
-      <div className="mt-4 flex items-baseline gap-1">
-        <span className="text-[40px] font-semibold leading-none text-[var(--text)]">{value}</span>
-        {suffix ? <span className="text-[18px] text-[var(--muted)]">{suffix}</span> : null}
+    <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-4">
+        <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+          <ShieldCheckIcon />
+        </div>
+        <div>
+          <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
+          <p className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)]">
+            Casper autonomous wallet defense
+          </p>
+        </div>
       </div>
-    </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex h-12 items-center gap-2 rounded-full border border-[var(--budget-border)] bg-[var(--panel)] px-5 text-[15px] text-[var(--text)]">
+          <span className="text-[var(--accent-strong)]">
+            <BoltIcon />
+          </span>
+          <span>{formatCurrency(remainingBudget)} remaining</span>
+        </div>
+        <button
+          aria-label="Notifications"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          type="button"
+        >
+          <BellIcon />
+        </button>
+        <button
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+          type="button"
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>
+        {isWalletConnected ? (
+          <button
+            className="flex h-12 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 transition-colors hover:border-[var(--budget-border)]"
+            type="button"
+            onClick={onDisconnectWallet}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[12px] font-semibold text-[var(--button-ink)]">
+              SA
+            </div>
+            <span className="pr-2 font-mono text-[13px] text-[var(--muted)]">{walletLabel}</span>
+          </button>
+        ) : (
+          <button
+            className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90"
+            type="button"
+            onClick={onConnectWallet}
+          >
+            {isConnectingWallet ? "Connecting..." : "Connect Wallet"}
+          </button>
+        )}
+      </div>
+    </header>
   );
 }
 
@@ -464,11 +518,9 @@ function SegmentTabs<T extends string>({
 function SpendChart({
   values,
   labels,
-  compact = false,
 }: {
   values: number[];
   labels: string[];
-  compact?: boolean;
 }) {
   const max = Math.max(...values, 1);
   const points = values
@@ -481,8 +533,8 @@ function SpendChart({
   const area = `0,100 ${points} 100,100`;
 
   return (
-    <div className={compact ? "mt-3" : "mt-8"}>
-      <div className={`relative w-full ${compact ? "h-[120px]" : "h-[220px] sm:h-[260px]"}`}>
+    <div className="mt-8">
+      <div className="relative h-[220px] w-full sm:h-[260px]">
         <svg aria-hidden="true" className="h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
           <line x1="0" x2="100" y1="24" y2="24" className="chart-grid" />
           <line x1="0" x2="100" y1="50" y2="50" className="chart-grid" />
@@ -498,7 +550,7 @@ function SpendChart({
           />
         </svg>
       </div>
-      <div className={`grid grid-cols-5 text-[10px] text-[var(--faint)] ${compact ? "mt-2" : "mt-4"}`}>
+      <div className="mt-4 grid grid-cols-5 text-[10px] text-[var(--faint)]">
         {labels.map((label) => (
           <span key={label}>{label}</span>
         ))}
@@ -668,66 +720,27 @@ function MetricTile({
   );
 }
 
-function AppChrome({
-  theme,
-  remainingBudget,
-  onToggleTheme,
-}: {
-  theme: ThemeMode;
-  remainingBudget: number;
-  onToggleTheme: () => void;
-}) {
-  return (
-    <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex items-center gap-4">
-        <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-          <ShieldCheckIcon />
-        </div>
-        <div>
-          <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
-          <p className="text-[12px] uppercase tracking-[0.2em] text-[var(--muted)]">
-            Casper autonomous wallet defense
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex h-12 items-center gap-2 rounded-full border border-[var(--budget-border)] bg-[var(--panel)] px-5 text-[15px] text-[var(--text)]">
-          <span className="text-[var(--accent-strong)]">
-            <BoltIcon />
-          </span>
-          <span>{formatCurrency(remainingBudget)} remaining</span>
-        </div>
-        <button
-          aria-label="Notifications"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-          type="button"
-        >
-          <BellIcon />
-        </button>
-        <button
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-          type="button"
-          onClick={onToggleTheme}
-        >
-          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-        </button>
-        <div className="flex h-12 items-center gap-3 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[12px] font-semibold text-[var(--button-ink)]">
-            SA
-          </div>
-          <span className="pr-2 font-mono text-[13px] text-[var(--muted)]">{formatWalletAddress()}</span>
-        </div>
-      </div>
-    </header>
-  );
+function applySessionState(
+  session: UserAgentSession,
+  setConnectedUserPublicKey: (value: string) => void,
+  setAgentPublicKey: (value: string) => void,
+  setAgentAccountHash: (value: string) => void,
+  setAgentBalanceCspr: (value: number) => void,
+  setPolicy: (value: Policy) => void,
+  setActivityLog: (value: ActivityItem[]) => void,
+) {
+  setConnectedUserPublicKey(session.userPublicKey);
+  setAgentPublicKey(session.agentPublicKey);
+  setAgentAccountHash(session.agentAccountHash);
+  setAgentBalanceCspr(session.agentBalanceCspr);
+  setPolicy(session.policy);
+  setActivityLog(session.activity ?? []);
 }
 
 export default function Home() {
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [viewMode, setViewMode] = useState<ViewMode>("landing");
-  const [policy, setPolicy] = useState<Policy>(initialPolicy);
+  const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [casperLiveEnabled, setCasperLiveEnabled] = useState(false);
   const [isSubmittingLiveCasper, setIsSubmittingLiveCasper] = useState(false);
@@ -735,7 +748,19 @@ export default function Home() {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [editingField, setEditingField] = useState<PolicyField | null>(null);
   const [draftPolicyValue, setDraftPolicyValue] = useState("");
+  const [connectedUserPublicKey, setConnectedUserPublicKey] = useState("");
+  const [agentPublicKey, setAgentPublicKey] = useState("");
+  const [agentAccountHash, setAgentAccountHash] = useState("");
+  const [agentBalanceCspr, setAgentBalanceCspr] = useState(0);
+  const [fundAmount, setFundAmount] = useState("2.0");
+  const [isFundingAgent, setIsFundingAgent] = useState(false);
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusTone, setStatusTone] = useState<"neutral" | "success" | "danger">("neutral");
+  const [hasLoadedSession, setHasLoadedSession] = useState(false);
   const requestIndex = useRef(0);
+
+  const isWalletConnected = Boolean(connectedUserPublicKey);
 
   const snapshot: SpendSnapshot = useMemo(
     () => ({
@@ -748,7 +773,120 @@ export default function Home() {
     [activityLog],
   );
 
-  const confirmPolicyEdit = useCallback(() => {
+  const syncSessionToState = useCallback((session: UserAgentSession) => {
+    applySessionState(
+      session,
+      setConnectedUserPublicKey,
+      setAgentPublicKey,
+      setAgentAccountHash,
+      setAgentBalanceCspr,
+      setPolicy,
+      setActivityLog,
+    );
+    setHasLoadedSession(true);
+  }, []);
+
+  const connectWallet = useCallback(async () => {
+    const provider = getWalletProvider();
+    if (!provider) {
+      setStatusTone("danger");
+      setStatusMessage("Casper Wallet extension was not detected in this browser.");
+      setViewMode("app");
+      return;
+    }
+
+    setIsConnectingWallet(true);
+    setStatusTone("neutral");
+    setStatusMessage("");
+
+    try {
+      const connected = await provider.requestConnection();
+      if (!connected) {
+        throw new Error("Wallet connection was declined.");
+      }
+
+      const userPublicKey = await provider.getActivePublicKey();
+      const session = await ensureUserSession(userPublicKey);
+      syncSessionToState(session);
+      setViewMode("app");
+      setStatusTone("success");
+      setStatusMessage(`Wallet connected. Agent ready at ${shortPublicKey(session.agentPublicKey)}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to connect Casper Wallet.";
+      setStatusTone("danger");
+      setStatusMessage(message);
+    } finally {
+      setIsConnectingWallet(false);
+    }
+  }, [syncSessionToState]);
+
+  const disconnectWallet = useCallback(async () => {
+    try {
+      await getWalletProvider()?.disconnectFromSite?.();
+    } catch {
+      // ignore provider disconnect failures for demo flow
+    }
+
+    setConnectedUserPublicKey("");
+    setAgentPublicKey("");
+    setAgentAccountHash("");
+    setAgentBalanceCspr(0);
+    setPolicy(defaultPolicy);
+    setActivityLog([]);
+    setCasperLiveEnabled(false);
+    setHasLoadedSession(false);
+    setStatusTone("neutral");
+    setStatusMessage("Wallet disconnected. Connect again to reload your agent wallet.");
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateExistingWallet() {
+      const provider = getWalletProvider();
+      if (!provider?.isConnected) {
+        return;
+      }
+
+      try {
+        const alreadyConnected = await provider.isConnected();
+        if (!alreadyConnected) {
+          return;
+        }
+
+        const userPublicKey = await provider.getActivePublicKey();
+        const session = await ensureUserSession(userPublicKey);
+
+        if (!cancelled) {
+          syncSessionToState(session);
+        }
+      } catch {
+        // ignore silent hydration errors
+      }
+    }
+
+    void hydrateExistingWallet();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [syncSessionToState]);
+
+  useEffect(() => {
+    if (!connectedUserPublicKey || !hasLoadedSession) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void persistUserActivity(connectedUserPublicKey, activityLog).catch(() => {
+        // keep the UI responsive even if the demo store write fails
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [activityLog, connectedUserPublicKey, hasLoadedSession]);
+
+  const confirmPolicyEdit = useCallback(async () => {
     if (!editingField) {
       return;
     }
@@ -760,13 +898,30 @@ export default function Home() {
       return;
     }
 
-    setPolicy((current) => ({
-      ...current,
+    const nextPolicy: Policy = {
+      ...policy,
       [editingField]: editingField === "dailyCallLimit" ? Math.max(1, Math.round(parsedValue)) : parsedValue,
-    }));
+    };
+
+    setPolicy(nextPolicy);
     setEditingField(null);
     setDraftPolicyValue("");
-  }, [draftPolicyValue, editingField]);
+
+    if (!connectedUserPublicKey) {
+      return;
+    }
+
+    try {
+      const session = await persistUserPolicy(connectedUserPublicKey, nextPolicy);
+      setPolicy(session.policy);
+      setStatusTone("success");
+      setStatusMessage("Policy updated for the connected user wallet.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to persist policy.";
+      setStatusTone("danger");
+      setStatusMessage(message);
+    }
+  }, [connectedUserPublicKey, draftPolicyValue, editingField, policy]);
 
   const cancelPolicyEdit = useCallback(() => {
     setEditingField(null);
@@ -818,15 +973,65 @@ export default function Home() {
     [policy],
   );
 
+  const fundAgent = useCallback(async () => {
+    if (!connectedUserPublicKey) {
+      setStatusTone("danger");
+      setStatusMessage("Connect a wallet before funding the agent.");
+      return;
+    }
+
+    const provider = getWalletProvider();
+    if (!provider) {
+      setStatusTone("danger");
+      setStatusMessage("Casper Wallet extension is not available.");
+      return;
+    }
+
+    setIsFundingAgent(true);
+    setStatusTone("neutral");
+    setStatusMessage("Preparing a real Casper testnet transfer for your wallet to sign...");
+
+    try {
+      const prepared = await prepareAgentFunding(connectedUserPublicKey, fundAmount);
+      const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+      const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
+      const result = await submitAgentFunding(connectedUserPublicKey, signedDeployJson);
+
+      setAgentBalanceCspr(result.agentBalanceCspr);
+      setStatusTone("success");
+      setStatusMessage(
+        `Agent funded successfully. Transfer deploy ${shortDeployHash(result.deployHash)} is on testnet.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Funding transfer failed.";
+      setStatusTone("danger");
+      setStatusMessage(message);
+    } finally {
+      setIsFundingAgent(false);
+    }
+  }, [connectedUserPublicKey, fundAmount]);
+
   const firePayment = useCallback(async () => {
+    if (!connectedUserPublicKey) {
+      setStatusTone("danger");
+      setStatusMessage("Connect a wallet first so SentryAgent can bind a dedicated agent wallet.");
+      return;
+    }
+
     const request = createMockPaymentRequest(requestIndex.current);
     requestIndex.current += 1;
 
     if (casperLiveEnabled) {
+      if (agentBalanceCspr <= 0) {
+        setStatusTone("danger");
+        setStatusMessage("Fund the agent wallet before sending real Casper contract calls.");
+        return;
+      }
+
       setIsSubmittingLiveCasper(true);
 
       try {
-        const result = await checkAndRecordOnCasper(request);
+        const result = await checkAndRecordOnCasper(connectedUserPublicKey, request);
         const nextItem: ActivityItem = {
           ...request,
           status: result.status,
@@ -841,6 +1046,11 @@ export default function Home() {
         };
 
         setActivityLog((current) => [nextItem, ...current]);
+        if (typeof result.agentBalanceCspr === "number") {
+          setAgentBalanceCspr(result.agentBalanceCspr);
+        }
+        setStatusTone("success");
+        setStatusMessage(`Live contract call submitted as deploy ${shortDeployHash(result.deployHash)}.`);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Casper testnet request failed.";
         setActivityLog((current) => [
@@ -854,6 +1064,8 @@ export default function Home() {
           },
           ...current,
         ]);
+        setStatusTone("danger");
+        setStatusMessage(message);
       } finally {
         setIsSubmittingLiveCasper(false);
       }
@@ -885,9 +1097,9 @@ export default function Home() {
 
       return [nextItem, ...current];
     });
-  }, [casperLiveEnabled, policy, settleComplianceCheck]);
+  }, [agentBalanceCspr, casperLiveEnabled, connectedUserPublicKey, policy, settleComplianceCheck]);
 
-  const visibleActivity = useMemo(() => activityLog.slice(0, 6), [activityLog]);
+  const visibleActivity = useMemo(() => activityLog.slice(0, 8), [activityLog]);
   const checkingCount = activityLog.filter((item) => item.status === "checking").length;
   const remainingBudget = Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0);
 
@@ -925,7 +1137,13 @@ export default function Home() {
         ? ["00:00", "06:00", "12:00", "18:00", "Now"]
         : ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
-  const nextCheckLabel = checkingCount ? "Running" : "Idle";
+  const walletLabel = isWalletConnected ? shortPublicKey(connectedUserPublicKey) : "Connect Wallet";
+  const statusClass =
+    statusTone === "success"
+      ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
+      : statusTone === "danger"
+        ? "border-[var(--danger)]/25 bg-[color:rgba(239,68,68,0.08)] text-[var(--danger)]"
+        : "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]";
 
   return (
     <main
@@ -970,24 +1188,9 @@ export default function Home() {
                 Block risky wallet spend before funds move.
               </h1>
               <p className="mt-8 max-w-[860px] text-[20px] leading-[1.7] text-[var(--muted)] sm:text-[22px]">
-                SentryAgent sits between autonomous agents and x402-powered Casper wallets, enforcing
-                spend caps, daily velocity rules, allowlists, and live compliance checks before payment
-                requests get approved.
+                Connect a real Casper Wallet, generate a dedicated server-held agent wallet per user,
+                fund it with a signed testnet transfer, and watch spend policy decisions stream live.
               </p>
-              <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-[15px] text-[var(--muted)]">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]">
-                    <CubeIcon />
-                  </span>
-                  <span>Casper AI toolkit ready</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-                    <BoltIcon />
-                  </span>
-                  <span>x402 spend evaluation in real time</span>
-                </div>
-              </div>
             </section>
 
             <div className="flex justify-center pb-10">
@@ -1008,190 +1211,249 @@ export default function Home() {
             <div className="hero-orb pointer-events-none absolute right-[-120px] top-[80px] h-[320px] w-[320px] rounded-full blur-3xl" />
             <div className="relative mx-auto w-full max-w-[1600px] px-5 py-7 sm:px-8 lg:px-10 xl:px-12">
               <AppChrome
+                isConnectingWallet={isConnectingWallet}
+                isWalletConnected={isWalletConnected}
                 remainingBudget={remainingBudget}
                 theme={theme}
+                walletLabel={walletLabel}
+                onConnectWallet={() => void connectWallet()}
+                onDisconnectWallet={() => void disconnectWallet()}
                 onToggleTheme={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
               />
             </div>
           </div>
 
           <div id="monitor" className="mx-auto w-full max-w-[1600px] px-5 py-8 sm:px-8 lg:px-10 xl:px-12">
-        <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-[720px]">
-                <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Live monitor</p>
-                <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
-                  Watch every attempted spend move through policy.
-                </h2>
-                <p className="mt-5 text-[17px] leading-[1.8] text-[var(--muted)] sm:text-[18px]">
-                  Approved requests pass instantly, unknown endpoints trigger compliance, and blocked
-                  spends surface with human-readable reasoning for the operator.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90"
-                  type="button"
-                  disabled={isSubmittingLiveCasper}
-                  onClick={firePayment}
-                >
-                  <PlayIcon />
-                  {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
-                </button>
-                <button
-                  className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors ${
-                    casperLiveEnabled
-                      ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
-                      : "border-[var(--border)] bg-[var(--button-secondary)] text-[var(--muted)]"
-                  }`}
-                  type="button"
-                  onClick={() => setCasperLiveEnabled((current) => !current)}
-                >
-                  <span
-                    className={`h-2.5 w-2.5 rounded-full ${
-                      casperLiveEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted)]"
-                    }`}
-                  />
-                  {casperLiveEnabled ? "Casper testnet live" : "Mock agent online"}
-                </button>
-                <div className="inline-flex h-14 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-6 text-[15px] text-[var(--muted)]">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
-                  {casperLiveEnabled ? "Next click uses onchain cap" : "Policy engine local"}
-                </div>
-              </div>
-            </div>
-          </div>
+            {statusMessage ? (
+              <div className={`mb-6 rounded-[18px] border px-5 py-4 text-[14px] ${statusClass}`}>{statusMessage}</div>
+            ) : null}
 
-          <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
-            <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Guarded agent</p>
-            <div className="mt-6 flex items-start gap-5">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-                <RobotIcon />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[20px] font-medium text-[var(--text)]">Arbitrage Scanner Bot</p>
-                <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
-                  Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
-                </p>
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
-                    AR
+            <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+              <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-[720px]">
+                    <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Live monitor</p>
+                    <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
+                      Watch every attempted spend move through policy.
+                    </h2>
+                    <p className="mt-5 text-[17px] leading-[1.8] text-[var(--muted)] sm:text-[18px]">
+                      Connect a wallet to bind a dedicated agent, then choose between the local simulator
+                      path and real Casper testnet contract calls signed by that user-scoped agent wallet.
+                    </p>
                   </div>
-                  <span className="font-mono text-[14px] text-[var(--muted)]">0x82A4..4F1C</span>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="button"
+                      disabled={!isWalletConnected || isSubmittingLiveCasper}
+                      onClick={() => void firePayment()}
+                    >
+                      <PlayIcon />
+                      {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
+                    </button>
+                    <button
+                      className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        casperLiveEnabled
+                          ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
+                          : "border-[var(--border)] bg-[var(--button-secondary)] text-[var(--muted)]"
+                      }`}
+                      type="button"
+                      disabled={!isWalletConnected}
+                      onClick={() => setCasperLiveEnabled((current) => !current)}
+                    >
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          casperLiveEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted)]"
+                        }`}
+                      />
+                      {casperLiveEnabled ? "Casper testnet live" : "Mock agent online"}
+                    </button>
+                    <div className="inline-flex h-14 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-6 text-[15px] text-[var(--muted)]">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
+                      {casperLiveEnabled ? "Next click uses the shared onchain cap" : "Policy engine local"}
+                    </div>
+                  </div>
+                </div>
+
+                <SpendChart labels={chartLabels} values={chartSeries} />
+
+                <div className="mt-5 flex items-center justify-between">
+                  <p className="text-[13px] text-[var(--muted)]">
+                    {isWalletConnected
+                      ? `Connected wallet ${shortPublicKey(connectedUserPublicKey)}`
+                      : "Connect Casper Wallet to activate the multi-user flow."}
+                  </p>
+                  <SegmentTabs active={chartRange} options={chartRanges} onChange={setChartRange} />
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
 
-        <section className="mb-6 grid gap-4 lg:grid-cols-3">
-          <MetricTile
-            detail="Remaining approved budget before daily cap is hit."
-            label="Available today"
-            value={formatCurrency(remainingBudget)}
-          />
-          <MetricTile
-            detail="Total attempts evaluated across the active session."
-            label="Requests inspected"
-            value={String(snapshot.attemptedCalls).padStart(2, "0")}
-          />
-          <MetricTile
-            detail={checkingCount ? "Live compliance checks currently in flight." : "No pending compliance checks right now."}
-            label="Compliance queue"
-            value={checkingCount ? String(checkingCount).padStart(2, "0") : "Idle"}
-          />
-        </section>
+              <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Guarded agent</p>
+                <div className="mt-6 flex items-start gap-5">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+                    <RobotIcon />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[20px] font-medium text-[var(--text)]">Arbitrage Scanner Bot</p>
+                    <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
+                      Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
+                    </p>
+                    <div className="mt-5 grid gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
+                          AR
+                        </div>
+                        <span className="font-mono text-[14px] text-[var(--muted)]">
+                          {agentPublicKey ? shortPublicKey(agentPublicKey) : "Awaiting wallet connection"}
+                        </span>
+                      </div>
+                      <p className="font-mono text-[13px] text-[var(--faint)]">
+                        {agentAccountHash || "User-scoped account hash will appear here after connect."}
+                      </p>
+                      <p className="text-[15px] text-[var(--muted)]">
+                        Balance: <span className="font-medium text-[var(--text)]">{formatBalance(agentBalanceCspr)} CSPR</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-        <section className="mb-6 grid gap-4 lg:grid-cols-3">
-          <EditablePolicyCard
-            detail="Max per single payment."
-            draftValue={draftPolicyValue}
-            editingField={editingField}
-            field="perCallCap"
-            icon={<BoltIcon />}
-            label="Per-call cap"
-            policy={policy}
-            onCancel={cancelPolicyEdit}
-            onChangeDraft={setDraftPolicyValue}
-            onConfirm={confirmPolicyEdit}
-            onStartEdit={(field) => {
-              setEditingField(field);
-              setDraftPolicyValue(String(policy[field]));
-            }}
-          />
-          <EditablePolicyCard
-            detail="Total approved spend allowed today."
-            draftValue={draftPolicyValue}
-            editingField={editingField}
-            field="dailySpendLimit"
-            icon={<ShieldCheckIcon />}
-            label="Daily limit"
-            policy={policy}
-            onCancel={cancelPolicyEdit}
-            onChangeDraft={setDraftPolicyValue}
-            onConfirm={confirmPolicyEdit}
-            onStartEdit={(field) => {
-              setEditingField(field);
-              setDraftPolicyValue(String(policy[field]));
-            }}
-          />
-          <EditablePolicyCard
-            detail="Maximum number of calls per day."
-            draftValue={draftPolicyValue}
-            editingField={editingField}
-            field="dailyCallLimit"
-            icon={<CubeIcon />}
-            label="Daily call count"
-            policy={policy}
-            onCancel={cancelPolicyEdit}
-            onChangeDraft={setDraftPolicyValue}
-            onConfirm={confirmPolicyEdit}
-            onStartEdit={(field) => {
-              setEditingField(field);
-              setDraftPolicyValue(String(policy[field]));
-            }}
-          />
-        </section>
-
-        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
-          <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Activity feed</p>
-              <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
-                Live activity stream
-              </h3>
-            </div>
-            <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
-          </div>
-
-          <div className="grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 border-b border-[var(--divider)] px-6 py-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7">
-            <span>Time</span>
-            <span>Merchant</span>
-            <span className="text-right">Amount</span>
-            <span className="text-right">Status</span>
-          </div>
-
-          {filteredActivity.length ? (
-            filteredActivity.map((item, index) => (
-              <div
-                className={index < filteredActivity.length - 1 ? "border-b border-[var(--divider)]" : ""}
-                key={item.id}
-              >
-                <ActivityRow isNewest={index === 0} item={item} />
+                <div className="mt-8 border-t border-[var(--divider)] pt-6">
+                  <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Fund agent</p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      className="h-12 flex-1 rounded-[14px] border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-[15px] text-[var(--text)] outline-none"
+                      inputMode="decimal"
+                      placeholder="2.0"
+                      value={fundAmount}
+                      onChange={(event) => setFundAmount(event.target.value)}
+                    />
+                    <button
+                      className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="button"
+                      disabled={!isWalletConnected || isFundingAgent}
+                      onClick={() => void fundAgent()}
+                    >
+                      {isFundingAgent ? "Waiting for signature..." : "Fund agent"}
+                    </button>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-[1.7] text-[var(--muted)]">
+                    This builds a real native CSPR transfer deploy from your connected wallet to the
+                    server-held agent wallet, then asks the Casper Wallet extension to sign it.
+                  </p>
+                </div>
               </div>
-            ))
-          ) : (
-            <div className="px-6 py-14 text-center">
-              <p className="text-[16px] font-medium text-[var(--text)]">No activity yet</p>
-              <p className="mx-auto mt-3 max-w-[520px] text-[14px] leading-[1.7] text-[var(--muted)]">
-                Fire a request to stream simulated wallet spend decisions into the feed and watch policy
-                approvals, checks, and blocks arrive in real time.
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
+            </section>
+
+            <section className="mb-6 grid gap-4 lg:grid-cols-3">
+              <MetricTile
+                detail="Remaining approved budget before daily cap is hit."
+                label="Available today"
+                value={formatCurrency(remainingBudget)}
+              />
+              <MetricTile
+                detail="Total attempts evaluated for the connected user."
+                label="Requests inspected"
+                value={String(snapshot.attemptedCalls).padStart(2, "0")}
+              />
+              <MetricTile
+                detail={checkingCount ? "Live compliance checks currently in flight." : "No pending compliance checks right now."}
+                label="Compliance queue"
+                value={checkingCount ? String(checkingCount).padStart(2, "0") : "Idle"}
+              />
+            </section>
+
+            <section className="mb-6 grid gap-4 lg:grid-cols-3">
+              <EditablePolicyCard
+                detail="Max per single payment."
+                draftValue={draftPolicyValue}
+                editingField={editingField}
+                field="perCallCap"
+                icon={<BoltIcon />}
+                label="Per-call cap"
+                policy={policy}
+                onCancel={cancelPolicyEdit}
+                onChangeDraft={setDraftPolicyValue}
+                onConfirm={() => void confirmPolicyEdit()}
+                onStartEdit={(field) => {
+                  setEditingField(field);
+                  setDraftPolicyValue(String(policy[field]));
+                }}
+              />
+              <EditablePolicyCard
+                detail="Total approved spend allowed today."
+                draftValue={draftPolicyValue}
+                editingField={editingField}
+                field="dailySpendLimit"
+                icon={<ShieldCheckIcon />}
+                label="Daily limit"
+                policy={policy}
+                onCancel={cancelPolicyEdit}
+                onChangeDraft={setDraftPolicyValue}
+                onConfirm={() => void confirmPolicyEdit()}
+                onStartEdit={(field) => {
+                  setEditingField(field);
+                  setDraftPolicyValue(String(policy[field]));
+                }}
+              />
+              <EditablePolicyCard
+                detail="Maximum number of calls per day."
+                draftValue={draftPolicyValue}
+                editingField={editingField}
+                field="dailyCallLimit"
+                icon={<CubeIcon />}
+                label="Daily call count"
+                policy={policy}
+                onCancel={cancelPolicyEdit}
+                onChangeDraft={setDraftPolicyValue}
+                onConfirm={() => void confirmPolicyEdit()}
+                onStartEdit={(field) => {
+                  setEditingField(field);
+                  setDraftPolicyValue(String(policy[field]));
+                }}
+              />
+            </section>
+
+            <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
+              <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Activity feed</p>
+                  <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+                    Live activity stream
+                  </h3>
+                </div>
+                <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
+              </div>
+
+              <div className="grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 border-b border-[var(--divider)] px-6 py-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7">
+                <span>Time</span>
+                <span>Merchant</span>
+                <span className="text-right">Amount</span>
+                <span className="text-right">Status</span>
+              </div>
+
+              {filteredActivity.length ? (
+                filteredActivity.map((item, index) => (
+                  <div
+                    className={index < filteredActivity.length - 1 ? "border-b border-[var(--divider)]" : ""}
+                    key={item.id}
+                  >
+                    <ActivityRow isNewest={index === 0} item={item} />
+                  </div>
+                ))
+              ) : (
+                <div className="px-6 py-14 text-center">
+                  <p className="text-[16px] font-medium text-[var(--text)]">
+                    {isWalletConnected ? "No activity yet" : "Connect wallet to begin"}
+                  </p>
+                  <p className="mx-auto mt-3 max-w-[520px] text-[14px] leading-[1.7] text-[var(--muted)]">
+                    {isWalletConnected
+                      ? "Fire a request to stream simulated wallet spend decisions into the feed and watch policy approvals, checks, and blocks arrive in real time."
+                      : "Your connected user will get a dedicated agent wallet, per-user policy storage, and an isolated activity stream."}
+                  </p>
+                </div>
+              )}
+            </section>
+          </div>
         </div>
       )}
     </main>
