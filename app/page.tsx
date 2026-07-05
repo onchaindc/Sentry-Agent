@@ -24,6 +24,7 @@ type ActivityFilter = "all" | "approved" | "blocked";
 type ChartRange = "1H" | "24H" | "7D";
 type PolicyField = "perCallCap" | "dailySpendLimit" | "dailyCallLimit";
 type ViewMode = "landing" | "app";
+type DashboardTab = "Overview" | "Policy" | "Activity";
 type ThemeVars = CSSProperties & Record<`--${string}`, string>;
 
 declare global {
@@ -58,6 +59,7 @@ const WALLET_PROVIDER_TIMEOUT_MS = 30 * 60 * 1000;
 
 const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
 const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
+const dashboardTabs: DashboardTab[] = ["Overview", "Policy", "Activity"];
 
 const themeVars: Record<ThemeMode, ThemeVars> = {
   dark: {
@@ -285,7 +287,7 @@ function getWalletProvider() {
 
 function ShieldCheckIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M12 3.25 5.75 5.9v5.35c0 4.4 2.65 8.48 6.25 9.5 3.6-1.02 6.25-5.1 6.25-9.5V5.9L12 3.25Z"
         stroke="currentColor"
@@ -306,7 +308,7 @@ function ShieldCheckIcon() {
 
 function BoltIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M13.25 2.75 6.75 13h4.5L10.75 21.25 17.25 11h-4.5l.5-8.25Z"
         fill="currentColor"
@@ -317,7 +319,7 @@ function BoltIcon() {
 
 function CubeIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M12 3.75 5.5 7.25v9.5L12 20.25l6.5-3.5v-9.5L12 3.75Z"
         stroke="currentColor"
@@ -332,7 +334,7 @@ function CubeIcon() {
 
 function BellIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M8.5 17.25h7m-8-1.25V10a4.5 4.5 0 1 1 9 0v6l1.25 1.25H6.25L7.5 16Z"
         stroke="currentColor"
@@ -347,7 +349,14 @@ function BellIcon() {
 
 function PlayIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4 flex-none"
+      fill="currentColor"
+      height="16"
+      viewBox="0 0 24 24"
+      width="16"
+    >
       <path d="M8 6.25v11.5L17.25 12 8 6.25Z" />
     </svg>
   );
@@ -355,7 +364,7 @@ function PlayIcon() {
 
 function SunIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <circle cx="12" cy="12" r="3.25" stroke="currentColor" strokeWidth="1.6" />
       <path
         d="M12 3.5v2.25M12 18.25v2.25M20.5 12h-2.25M5.75 12H3.5M18.01 5.99l-1.6 1.6M7.59 16.41l-1.6 1.6M18.01 18.01l-1.6-1.6M7.59 7.59l-1.6-1.6"
@@ -369,7 +378,7 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M15.5 3.75a7.75 7.75 0 1 0 4.75 14.25 8.5 8.5 0 1 1-4.75-14.25Z"
         stroke="currentColor"
@@ -383,7 +392,14 @@ function MoonIcon() {
 
 function CheckIcon() {
   return (
-    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+    <svg
+      aria-hidden="true"
+      className="h-3.5 w-3.5 flex-none"
+      fill="none"
+      height="14"
+      viewBox="0 0 24 24"
+      width="14"
+    >
       <path
         d="m5.75 12.5 4.1 4.1 8.4-8.85"
         stroke="currentColor"
@@ -397,7 +413,14 @@ function CheckIcon() {
 
 function XIcon() {
   return (
-    <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+    <svg
+      aria-hidden="true"
+      className="h-3.5 w-3.5 flex-none"
+      fill="none"
+      height="14"
+      viewBox="0 0 24 24"
+      width="14"
+    >
       <path
         d="M6.75 6.75 17.25 17.25M17.25 6.75 6.75 17.25"
         stroke="currentColor"
@@ -410,7 +433,7 @@ function XIcon() {
 
 function RobotIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="h-4 w-4 flex-none" fill="none" height="16" viewBox="0 0 24 24" width="16">
       <path
         d="M9 4.5h6M12 4.5v3M7.75 8.75h8.5A2.75 2.75 0 0 1 19 11.5v4.75A2.75 2.75 0 0 1 16.25 19h-8.5A2.75 2.75 0 0 1 5 16.25V11.5A2.75 2.75 0 0 1 7.75 8.75Z"
         stroke="currentColor"
@@ -430,6 +453,7 @@ function AppChrome({
   walletLabel,
   isConnectingWallet,
   isWalletConnected,
+  notifications,
   onToggleTheme,
   onConnectWallet,
   onDisconnectWallet,
@@ -439,10 +463,13 @@ function AppChrome({
   walletLabel: string;
   isConnectingWallet: boolean;
   isWalletConnected: boolean;
+  notifications: { id: string; title: string; detail: string }[];
   onToggleTheme: () => void;
   onConnectWallet: () => void;
   onDisconnectWallet: () => void;
 }) {
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
   return (
     <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-4">
@@ -464,13 +491,41 @@ function AppChrome({
           </span>
           <span>{formatCurrency(remainingBudget)} remaining</span>
         </div>
-        <button
-          aria-label="Notifications"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-          type="button"
-        >
-          <BellIcon />
-        </button>
+        <div className="relative">
+          <button
+            aria-expanded={isNotificationsOpen}
+            aria-label="Notifications"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+            type="button"
+            onClick={() => setIsNotificationsOpen((current) => !current)}
+          >
+            <BellIcon />
+          </button>
+          {isNotificationsOpen ? (
+            <div className="absolute right-0 top-[calc(100%+10px)] z-20 w-[280px] rounded-[18px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.12)]">
+              <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Notifications</p>
+              <div className="mt-4">
+                {notifications.length ? (
+                  <div className="space-y-3">
+                    {notifications.map((notification) => (
+                      <div
+                        className="rounded-[14px] border border-[var(--divider)] bg-[var(--surface-soft)] px-4 py-3"
+                        key={notification.id}
+                      >
+                        <p className="text-[14px] font-semibold text-[var(--text)]">{notification.title}</p>
+                        <p className="mt-1 text-[13px] text-[var(--muted)]">{notification.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex h-[120px] items-center justify-center text-center text-[14px] text-[var(--muted)]">
+                    No notifications yet
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
         <button
           aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--panel)] text-[var(--muted)] transition-colors hover:text-[var(--text)]"
@@ -629,13 +684,13 @@ function EditablePolicyCard({
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[17px] font-medium text-[var(--text)]">{label}</p>
+        <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
         <div className="mt-2 flex items-center gap-2">
           {isEditing ? (
             <>
               <input
                 autoFocus
-                className="w-full rounded-[12px] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2.5 text-[16px] font-medium text-[var(--text)] outline-none"
+                className="w-full rounded-[12px] border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2.5 text-[22px] font-semibold text-[var(--text)] outline-none"
                 step={field === "dailyCallLimit" ? "1" : "0.01"}
                 type="number"
                 value={draftValue}
@@ -677,10 +732,12 @@ function EditablePolicyCard({
               </button>
             </>
           ) : (
-            <p className="text-[14px] leading-[1.6] text-[var(--muted)]">
-              <span className="font-medium text-[var(--text)]">{formatPolicyValue(field, numericValue)}</span>
-              <span className="ml-2">{detail}</span>
-            </p>
+            <div>
+              <p className="text-[28px] font-semibold leading-none text-[var(--text)]">
+                {formatPolicyValue(field, numericValue)}
+              </p>
+              <p className="mt-2 text-[14px] leading-[1.6] text-[var(--muted)]">{detail}</p>
+            </div>
           )}
         </div>
       </div>
@@ -742,7 +799,7 @@ function MetricTile({
   return (
     <div className="glider-card rounded-[20px] px-6 py-6">
       <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
-      <p className="mt-4 text-[40px] font-semibold leading-none text-[var(--text)]">{value}</p>
+      <p className="mt-4 text-[40px] font-bold leading-none text-[var(--text)]">{value}</p>
       <p className="mt-3 text-[15px] leading-[1.6] text-[var(--muted)]">{detail}</p>
     </div>
   );
@@ -768,6 +825,7 @@ function applySessionState(
 export default function Home() {
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [viewMode, setViewMode] = useState<ViewMode>("landing");
+  const [dashboardTab, setDashboardTab] = useState<DashboardTab>("Overview");
   const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [casperLiveEnabled, setCasperLiveEnabled] = useState(false);
@@ -801,6 +859,8 @@ export default function Home() {
     }),
     [activityLog],
   );
+
+  const notifications = useMemo(() => [] as { id: string; title: string; detail: string }[], []);
 
   const syncSessionToState = useCallback((session: UserAgentSession) => {
     applySessionState(
@@ -864,8 +924,9 @@ export default function Home() {
     setActivityLog([]);
     setCasperLiveEnabled(false);
     setHasLoadedSession(false);
+    setDashboardTab("Overview");
     setStatusTone("neutral");
-    setStatusMessage("Wallet disconnected. Connect again to reload your agent wallet.");
+    setStatusMessage("Wallet disconnected.");
   }, []);
 
   useEffect(() => {
@@ -1150,6 +1211,7 @@ export default function Home() {
   const visibleActivity = useMemo(() => activityLog.slice(0, 8), [activityLog]);
   const checkingCount = activityLog.filter((item) => item.status === "checking").length;
   const remainingBudget = Math.max(policy.dailySpendLimit - snapshot.approvedSpend, 0);
+  const recentActivity = activityLog.slice(0, 3);
 
   const filteredActivity = visibleActivity.filter((item) => {
     if (activityFilter === "all") {
@@ -1261,6 +1323,7 @@ export default function Home() {
               <AppChrome
                 isConnectingWallet={isConnectingWallet}
                 isWalletConnected={isWalletConnected}
+                notifications={notifications}
                 remainingBudget={remainingBudget}
                 theme={theme}
                 walletLabel={walletLabel}
@@ -1276,249 +1339,323 @@ export default function Home() {
               <div className={`mb-6 rounded-[18px] border px-5 py-4 text-[14px] ${statusClass}`}>{statusMessage}</div>
             ) : null}
 
-            <section className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-              <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="max-w-[720px]">
-                    <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Live monitor</p>
-                    <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
-                      Watch every attempted spend move through policy.
-                    </h2>
-                    <p className="mt-5 text-[17px] leading-[1.8] text-[var(--muted)] sm:text-[18px]">
-                      Connect a wallet to bind a dedicated agent, then choose between the local simulator
-                      path and real Casper testnet contract calls signed by that user-scoped agent wallet.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                      type="button"
-                      disabled={!isWalletConnected || isSubmittingLiveCasper}
-                      onClick={() => void firePayment()}
-                    >
-                      <PlayIcon />
-                      {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
-                    </button>
-                    <button
-                      className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        casperLiveEnabled
-                          ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
-                          : "border-[var(--border)] bg-[var(--button-secondary)] text-[var(--muted)]"
-                      }`}
-                      type="button"
-                      disabled={!isWalletConnected}
-                      onClick={() => setCasperLiveEnabled((current) => !current)}
-                    >
-                      <span
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          casperLiveEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted)]"
-                        }`}
-                      />
-                      {casperLiveEnabled ? "Casper testnet live" : "Mock agent online"}
-                    </button>
-                    <div className="inline-flex h-14 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-6 text-[15px] text-[var(--muted)]">
-                      <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
-                      {casperLiveEnabled ? "Next click uses the shared onchain cap" : "Policy engine local"}
-                    </div>
-                  </div>
-                </div>
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <SegmentTabs active={dashboardTab} options={dashboardTabs} onChange={setDashboardTab} />
+            </div>
 
-                <SpendChart labels={chartLabels} values={chartSeries} />
-
-                <div className="mt-5 flex items-center justify-between">
-                  <p className="text-[13px] text-[var(--muted)]">
-                    {isWalletConnected
-                      ? `Connected wallet ${shortPublicKey(connectedUserPublicKey)}`
-                      : "Connect Casper Wallet to activate the multi-user flow."}
-                  </p>
-                  <SegmentTabs active={chartRange} options={chartRanges} onChange={setChartRange} />
-                </div>
-              </div>
-
-              <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
-                <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Guarded agent</p>
-                <div className="mt-6 flex items-start gap-5">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-                    <RobotIcon />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[20px] font-medium text-[var(--text)]">Arbitrage Scanner Bot</p>
-                    <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
-                      Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
-                    </p>
-                    <div className="mt-5 grid gap-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
-                          AR
-                        </div>
-                        <span className="font-mono text-[14px] text-[var(--muted)]">
-                          {agentPublicKey ? shortPublicKey(agentPublicKey) : "Awaiting wallet connection"}
-                        </span>
+            {dashboardTab === "Overview" ? (
+              <div className="space-y-6">
+                <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                  <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                      <div className="max-w-[720px]">
+                        <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Live monitor</p>
+                        <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
+                          Watch every spend request before funds move.
+                        </h2>
+                        <p className="mt-5 text-[17px] leading-[1.8] text-[var(--muted)] sm:text-[18px]">
+                          Review approvals, compliance checks, and blocked requests in one place.
+                        </p>
                       </div>
-                      <p className="font-mono text-[13px] text-[var(--faint)]">
-                        {agentAccountHash || "User-scoped account hash will appear here after connect."}
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={!isWalletConnected || isSubmittingLiveCasper}
+                          onClick={() => void firePayment()}
+                        >
+                          <PlayIcon />
+                          {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
+                        </button>
+                        <button
+                          className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                            casperLiveEnabled
+                              ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
+                              : "border-[var(--border)] bg-[var(--button-secondary)] text-[var(--muted)]"
+                          }`}
+                          type="button"
+                          disabled={!isWalletConnected}
+                          onClick={() => setCasperLiveEnabled((current) => !current)}
+                        >
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              casperLiveEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted)]"
+                            }`}
+                          />
+                          {casperLiveEnabled ? "Live Casper checks" : "Demo mode"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <SpendChart labels={chartLabels} values={chartSeries} />
+
+                    <div className="mt-5 flex items-center justify-between">
+                      <p className="text-[13px] text-[var(--muted)]">
+                        {isWalletConnected
+                          ? `Connected wallet ${shortPublicKey(connectedUserPublicKey)}`
+                          : "Connect your wallet to get started"}
                       </p>
-                      <p className="text-[15px] text-[var(--muted)]">
-                        Balance: <span className="font-medium text-[var(--text)]">{formatBalance(agentBalanceCspr)} CSPR</span>
-                      </p>
+                      <SegmentTabs active={chartRange} options={chartRanges} onChange={setChartRange} />
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-8 border-t border-[var(--divider)] pt-6">
-                  <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Fund agent</p>
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                    <input
-                      className="h-12 flex-1 rounded-[14px] border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-[15px] text-[var(--text)] outline-none"
-                      inputMode="decimal"
-                      placeholder="2.0"
-                      value={fundAmount}
-                      onChange={(event) => setFundAmount(event.target.value)}
-                    />
+                  <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                    <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
+                    <div className="mt-6 flex items-start gap-5">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+                        <RobotIcon />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[20px] font-semibold text-[var(--text)]">Arbitrage Scanner Bot</p>
+                        <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
+                          Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
+                        </p>
+                        <div className="mt-5 grid gap-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
+                              AR
+                            </div>
+                            <span className="font-mono text-[14px] text-[var(--muted)]">
+                              {agentPublicKey ? shortPublicKey(agentPublicKey) : "Connect wallet to see your agent"}
+                            </span>
+                          </div>
+                          <p className="font-mono text-[13px] text-[var(--faint)]">
+                            {agentAccountHash || "Connect wallet to see your agent's address"}
+                          </p>
+                          <p className="text-[15px] text-[var(--muted)]">
+                            Balance:{" "}
+                            <span className="text-[18px] font-semibold text-[var(--text)]">
+                              {formatBalance(agentBalanceCspr)} CSPR
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="grid gap-4 lg:grid-cols-3">
+                  <MetricTile
+                    detail="Remaining approved budget for today."
+                    label="Available today"
+                    value={formatCurrency(remainingBudget)}
+                  />
+                  <MetricTile
+                    detail="Requests inspected for this wallet."
+                    label="Requests inspected"
+                    value={String(snapshot.attemptedCalls).padStart(2, "0")}
+                  />
+                  <MetricTile
+                    detail={checkingCount ? "Requests waiting on compliance review." : "No requests waiting right now."}
+                    label="Compliance queue"
+                    value={checkingCount ? String(checkingCount).padStart(2, "0") : "Idle"}
+                  />
+                </section>
+
+                <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
+                  <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Recent activity</p>
+                      <h3 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+                        Latest decisions
+                      </h3>
+                    </div>
                     <button
-                      className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="text-[14px] font-medium text-[var(--accent-strong)] transition-opacity hover:opacity-80"
                       type="button"
-                      disabled={!isWalletConnected || isFundingAgent}
-                      onClick={() => void fundAgent()}
+                      onClick={() => setDashboardTab("Activity")}
                     >
-                      {isFundingAgent ? "Waiting for signature..." : "Fund agent"}
+                      View all
                     </button>
                   </div>
-                  <p className="mt-3 text-[13px] leading-[1.7] text-[var(--muted)]">
-                    This builds a real native CSPR transfer deploy from your connected wallet to the
-                    server-held agent wallet, then asks the Casper Wallet extension to sign it.
-                  </p>
-                </div>
+
+                  {recentActivity.length ? (
+                    recentActivity.map((item, index) => (
+                      <div className={index < recentActivity.length - 1 ? "border-b border-[var(--divider)]" : ""} key={item.id}>
+                        <ActivityRow isNewest={index === 0} item={item} />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-6 py-14 text-center text-[16px] font-medium text-[var(--text)]">
+                      {isWalletConnected ? "No activity yet" : "Connect wallet to begin"}
+                    </div>
+                  )}
+                </section>
               </div>
-            </section>
-
-            <section className="mb-6 grid gap-4 lg:grid-cols-3">
-              <MetricTile
-                detail="Remaining approved budget before daily cap is hit."
-                label="Available today"
-                value={formatCurrency(remainingBudget)}
-              />
-              <MetricTile
-                detail="Total attempts evaluated for the connected user."
-                label="Requests inspected"
-                value={String(snapshot.attemptedCalls).padStart(2, "0")}
-              />
-              <MetricTile
-                detail={checkingCount ? "Live compliance checks currently in flight." : "No pending compliance checks right now."}
-                label="Compliance queue"
-                value={checkingCount ? String(checkingCount).padStart(2, "0") : "Idle"}
-              />
-            </section>
-
-            <section className="mb-6 grid gap-4 lg:grid-cols-3">
-              <EditablePolicyCard
-                detail="Max per single payment."
-                draftValue={draftPolicyValue}
-                editingField={editingField}
-                field="perCallCap"
-                icon={<BoltIcon />}
-                label="Per-call cap"
-                policy={policy}
-                onCancel={cancelPolicyEdit}
-                onChangeDraft={setDraftPolicyValue}
-                onConfirm={() => void confirmPolicyEdit()}
-                onStartEdit={(field) => {
-                  setEditingField(field);
-                  setDraftPolicyValue(String(policy[field]));
-                }}
-              />
-              <EditablePolicyCard
-                detail="Total approved spend allowed today."
-                draftValue={draftPolicyValue}
-                editingField={editingField}
-                field="dailySpendLimit"
-                icon={<ShieldCheckIcon />}
-                label="Daily limit"
-                policy={policy}
-                onCancel={cancelPolicyEdit}
-                onChangeDraft={setDraftPolicyValue}
-                onConfirm={() => void confirmPolicyEdit()}
-                onStartEdit={(field) => {
-                  setEditingField(field);
-                  setDraftPolicyValue(String(policy[field]));
-                }}
-              />
-              <EditablePolicyCard
-                detail="Maximum number of calls per day."
-                draftValue={draftPolicyValue}
-                editingField={editingField}
-                field="dailyCallLimit"
-                icon={<CubeIcon />}
-                label="Daily call count"
-                policy={policy}
-                onCancel={cancelPolicyEdit}
-                onChangeDraft={setDraftPolicyValue}
-                onConfirm={() => void confirmPolicyEdit()}
-                onStartEdit={(field) => {
-                  setEditingField(field);
-                  setDraftPolicyValue(String(policy[field]));
-                }}
-              />
-            </section>
-
-            {latestX402Trace.length ? (
-              <section className="mb-6 rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-6 sm:px-7">
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">x402 trace</p>
-                    <h3 className="mt-3 text-[24px] font-semibold tracking-[-0.03em] text-[var(--text)]">
-                      RiskLens paid request sequence
-                    </h3>
-                  </div>
-                  <div className="space-y-2 font-mono text-[13px] leading-[1.7] text-[var(--muted)]">
-                    {latestX402Trace.map((entry) => (
-                      <p key={entry}>{entry}</p>
-                    ))}
-                  </div>
-                </div>
-              </section>
             ) : null}
 
-            <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
-              <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">Activity feed</p>
-                  <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
-                    Live activity stream
-                  </h3>
-                </div>
-                <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
-              </div>
+            {dashboardTab === "Policy" ? (
+              <div className="space-y-6">
+                <section className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                  <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="max-w-[720px]">
+                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
+                      <div className="mt-6 flex items-start gap-5">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
+                          <RobotIcon />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[20px] font-semibold text-[var(--text)]">Arbitrage Scanner Bot</p>
+                          <p className="mt-3 text-[15px] leading-[1.7] text-[var(--muted)]">
+                            Buying live market data across 5 endpoints to identify cross-DEX arbitrage opportunities.
+                          </p>
+                          <div className="mt-5 grid gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-[13px] font-semibold text-[var(--button-ink)]">
+                                AR
+                              </div>
+                              <span className="font-mono text-[14px] text-[var(--muted)]">
+                                {agentPublicKey ? shortPublicKey(agentPublicKey) : "Connect wallet to see your agent"}
+                              </span>
+                            </div>
+                            <p className="font-mono text-[13px] text-[var(--faint)]">
+                              {agentAccountHash || "Connect wallet to see your agent's address"}
+                            </p>
+                            <p className="text-[15px] text-[var(--muted)]">
+                              Balance:{" "}
+                              <span className="text-[18px] font-semibold text-[var(--text)]">
+                                {formatBalance(agentBalanceCspr)} CSPR
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
 
-              <div className="grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 border-b border-[var(--divider)] px-6 py-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7">
-                <span>Time</span>
-                <span>Merchant</span>
-                <span className="text-right">Amount</span>
-                <span className="text-right">Status</span>
-              </div>
-
-              {filteredActivity.length ? (
-                filteredActivity.map((item, index) => (
-                  <div
-                    className={index < filteredActivity.length - 1 ? "border-b border-[var(--divider)]" : ""}
-                    key={item.id}
-                  >
-                    <ActivityRow isNewest={index === 0} item={item} />
+                    <div className="w-full max-w-[420px] border-t border-[var(--divider)] pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Fund agent</p>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <input
+                          className="h-12 flex-1 rounded-[14px] border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-[15px] text-[var(--text)] outline-none"
+                          inputMode="decimal"
+                          placeholder="2.0"
+                          value={fundAmount}
+                          onChange={(event) => setFundAmount(event.target.value)}
+                        />
+                        <button
+                          className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={!isWalletConnected || isFundingAgent}
+                          onClick={() => void fundAgent()}
+                        >
+                          {isFundingAgent ? "Waiting for signature..." : "Fund agent"}
+                        </button>
+                      </div>
+                      <p className="mt-3 text-[13px] leading-[1.7] text-[var(--muted)]">
+                        Move testnet CSPR into your agent wallet before running live requests.
+                      </p>
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="px-6 py-14 text-center">
-                  <p className="text-[16px] font-medium text-[var(--text)]">
-                    {isWalletConnected ? "No activity yet" : "Connect wallet to begin"}
-                  </p>
-                  <p className="mx-auto mt-3 max-w-[520px] text-[14px] leading-[1.7] text-[var(--muted)]">
-                    {isWalletConnected
-                      ? "Fire a request to stream simulated wallet spend decisions into the feed and watch policy approvals, checks, and blocks arrive in real time."
-                      : "Your connected user will get a dedicated agent wallet, per-user policy storage, and an isolated activity stream."}
-                  </p>
-                </div>
-              )}
-            </section>
+                </section>
+
+                <section className="grid gap-4 lg:grid-cols-3">
+                  <EditablePolicyCard
+                    detail="Maximum approved amount for any single payment."
+                    draftValue={draftPolicyValue}
+                    editingField={editingField}
+                    field="perCallCap"
+                    icon={<BoltIcon />}
+                    label="Per-call cap"
+                    policy={policy}
+                    onCancel={cancelPolicyEdit}
+                    onChangeDraft={setDraftPolicyValue}
+                    onConfirm={() => void confirmPolicyEdit()}
+                    onStartEdit={(field) => {
+                      setEditingField(field);
+                      setDraftPolicyValue(String(policy[field]));
+                    }}
+                  />
+                  <EditablePolicyCard
+                    detail="Total amount this agent can approve in a day."
+                    draftValue={draftPolicyValue}
+                    editingField={editingField}
+                    field="dailySpendLimit"
+                    icon={<ShieldCheckIcon />}
+                    label="Daily limit"
+                    policy={policy}
+                    onCancel={cancelPolicyEdit}
+                    onChangeDraft={setDraftPolicyValue}
+                    onConfirm={() => void confirmPolicyEdit()}
+                    onStartEdit={(field) => {
+                      setEditingField(field);
+                      setDraftPolicyValue(String(policy[field]));
+                    }}
+                  />
+                  <EditablePolicyCard
+                    detail="Maximum number of requests allowed per day."
+                    draftValue={draftPolicyValue}
+                    editingField={editingField}
+                    field="dailyCallLimit"
+                    icon={<CubeIcon />}
+                    label="Daily call count"
+                    policy={policy}
+                    onCancel={cancelPolicyEdit}
+                    onChangeDraft={setDraftPolicyValue}
+                    onConfirm={() => void confirmPolicyEdit()}
+                    onStartEdit={(field) => {
+                      setEditingField(field);
+                      setDraftPolicyValue(String(policy[field]));
+                    }}
+                  />
+                </section>
+              </div>
+            ) : null}
+
+            {dashboardTab === "Activity" ? (
+              <div className="space-y-6">
+                {latestX402Trace.length ? (
+                  <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-6 sm:px-7">
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Compliance trace</p>
+                        <h3 className="mt-3 text-[24px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+                          Latest RiskLens check
+                        </h3>
+                      </div>
+                      <div className="space-y-2 font-mono text-[13px] leading-[1.7] text-[var(--muted)]">
+                        {latestX402Trace.map((entry) => (
+                          <p key={entry}>{entry}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+
+                <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
+                  <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Activity feed</p>
+                      <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+                        Live activity stream
+                      </h3>
+                    </div>
+                    <SegmentTabs active={activityFilter} options={activityFilters} onChange={setActivityFilter} />
+                  </div>
+
+                  <div className="grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 border-b border-[var(--divider)] px-6 py-4 text-[11px] uppercase tracking-[0.14em] text-[var(--muted)] sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7">
+                    <span>Time</span>
+                    <span>Merchant</span>
+                    <span className="text-right">Amount</span>
+                    <span className="text-right">Status</span>
+                  </div>
+
+                  {filteredActivity.length ? (
+                    filteredActivity.map((item, index) => (
+                      <div
+                        className={index < filteredActivity.length - 1 ? "border-b border-[var(--divider)]" : ""}
+                        key={item.id}
+                      >
+                        <ActivityRow isNewest={index === 0} item={item} />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-6 py-14 text-center text-[16px] font-medium text-[var(--text)]">
+                      {isWalletConnected ? "No activity yet" : "Connect wallet to begin"}
+                    </div>
+                  )}
+                </section>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
