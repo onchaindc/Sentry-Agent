@@ -1070,25 +1070,35 @@ export default function Home() {
 
       try {
         const result = await checkAndRecordOnCasper(connectedUserPublicKey, request);
+        if (result.mcpTrace?.length) {
+          console.info("[SentryAgent MCP]", result.mcpTrace.join("\n"));
+        }
+
+        const fallbackReason =
+          result.reason ??
+          (result.status === "approved"
+            ? `Casper testnet approved ${result.onchainAmount} cents via ${shortDeployHash(result.deployHash)}.`
+            : `Casper testnet blocked ${result.onchainAmount} cents at the onchain cap via ${shortDeployHash(result.deployHash)}.`);
         const nextItem: ActivityItem = {
           ...request,
           status: result.status,
           reasonCode: result.status === "approved" ? "allowlisted" : "per_call_cap",
-          reason:
-            result.status === "approved"
-              ? `Casper testnet approved ${result.onchainAmount} cents via ${shortDeployHash(result.deployHash)}.`
-              : `Casper testnet blocked ${result.onchainAmount} cents at the onchain cap via ${shortDeployHash(result.deployHash)}.`,
+          reason: fallbackReason,
           checkedAt: Date.now(),
-          source: "casper",
-          deployHash: result.deployHash,
+          source: result.source === "mcp" ? "mock" : "casper",
+          deployHash: result.deployHash || undefined,
         };
 
         setActivityLog((current) => [nextItem, ...current]);
         if (typeof result.agentBalanceCspr === "number") {
           setAgentBalanceCspr(result.agentBalanceCspr);
         }
-        setStatusTone("success");
-        setStatusMessage(`Live contract call submitted as deploy ${shortDeployHash(result.deployHash)}.`);
+        setStatusTone(result.status === "approved" ? "success" : "danger");
+        setStatusMessage(
+          result.status === "approved" && result.deployHash
+            ? `Live contract call submitted as deploy ${shortDeployHash(result.deployHash)}.`
+            : fallbackReason,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Casper testnet request failed.";
         setActivityLog((current) => [

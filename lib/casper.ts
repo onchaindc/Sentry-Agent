@@ -36,6 +36,12 @@ export type CasperCheckAndRecordResult = {
   eventName?: string;
   onchainAmount: string;
   agentBalanceCspr?: number;
+  reason?: string;
+  source?: "mcp" | "casper";
+  mcpConnected?: boolean;
+  mcpBalanceCspr?: number | null;
+  mcpWcsprRawBalance?: string | null;
+  mcpTrace?: string[];
 };
 
 export type UserAgentSession = {
