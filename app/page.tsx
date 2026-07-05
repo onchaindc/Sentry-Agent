@@ -28,15 +28,33 @@ type ThemeVars = CSSProperties & Record<`--${string}`, string>;
 
 declare global {
   interface Window {
-    CasperWalletProvider?: {
-      requestConnection: () => Promise<boolean>;
-      isConnected?: () => Promise<boolean>;
-      getActivePublicKey: () => Promise<string>;
-      disconnectFromSite?: () => Promise<void>;
-      sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
-    };
+    CasperWalletProvider?:
+      | ((options?: { timeout?: number }) => {
+          requestConnection: () => Promise<boolean>;
+          isConnected?: () => Promise<boolean>;
+          getActivePublicKey: () => Promise<string>;
+          disconnectFromSite?: () => Promise<void>;
+          sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+        })
+      | {
+          requestConnection: () => Promise<boolean>;
+          isConnected?: () => Promise<boolean>;
+          getActivePublicKey: () => Promise<string>;
+          disconnectFromSite?: () => Promise<void>;
+          sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+        };
   }
 }
+
+type WalletProvider = {
+  requestConnection: () => Promise<boolean>;
+  isConnected?: () => Promise<boolean>;
+  getActivePublicKey: () => Promise<string>;
+  disconnectFromSite?: () => Promise<void>;
+  sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+};
+
+const WALLET_PROVIDER_TIMEOUT_MS = 30 * 60 * 1000;
 
 const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
 const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
@@ -252,7 +270,17 @@ function getWalletProvider() {
     return null;
   }
 
-  return window.CasperWalletProvider ?? null;
+  const injectedProvider = window.CasperWalletProvider;
+
+  if (!injectedProvider) {
+    return null;
+  }
+
+  if (typeof injectedProvider === "function") {
+    return injectedProvider({ timeout: WALLET_PROVIDER_TIMEOUT_MS }) as WalletProvider;
+  }
+
+  return injectedProvider as WalletProvider;
 }
 
 function ShieldCheckIcon() {
