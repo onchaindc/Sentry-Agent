@@ -56,6 +56,7 @@ export type UserAgentSession = {
 export type FundingPrepareResponse = {
   deployJson: unknown;
   agentPublicKey: string;
+  agentAccountHash: string;
   amountCspr: string;
 };
 
@@ -152,8 +153,12 @@ export async function prepareAgentFunding(userPublicKey: string, amountCspr: str
   return postJson<FundingPrepareResponse>("/api/funding/prepare", { userPublicKey, amountCspr });
 }
 
-export async function submitAgentFunding(userPublicKey: string, signedDeployJson: string) {
-  return postJson<FundingSubmitResponse>("/api/funding/submit", { userPublicKey, signedDeployJson });
+export async function submitAgentFunding(userPublicKey: string, signedDeployJson: string, agentPublicKey: string) {
+  return postJson<FundingSubmitResponse>("/api/funding/submit", {
+    userPublicKey,
+    signedDeployJson,
+    agentPublicKey,
+  });
 }
 
 export async function checkAndRecordOnCasper(userPublicKey: string, request: CasperPaymentRequest) {

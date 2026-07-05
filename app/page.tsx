@@ -447,6 +447,10 @@ function RobotIcon() {
   );
 }
 
+function SentryAgentMark() {
+  return <img alt="" className="h-5 w-5 flex-none" src="/sentryagent-mark.svg" />;
+}
+
 function AppChrome({
   theme,
   remainingBudget,
@@ -474,7 +478,7 @@ function AppChrome({
     <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex items-center gap-4">
         <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-          <ShieldCheckIcon />
+          <SentryAgentMark />
         </div>
         <div>
           <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
@@ -1091,10 +1095,33 @@ export default function Home() {
     setStatusMessage("Preparing a real Casper testnet transfer for your wallet to sign...");
 
     try {
+      console.info("[fundAgent] prepare:start", {
+        userPublicKey: connectedUserPublicKey,
+        amountCspr: fundAmount,
+      });
       const prepared = await prepareAgentFunding(connectedUserPublicKey, fundAmount);
+      console.info("[fundAgent] prepare:success", {
+        userPublicKey: connectedUserPublicKey,
+        agentPublicKey: prepared.agentPublicKey,
+        agentAccountHash: prepared.agentAccountHash,
+      });
       const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+      console.info("[fundAgent] sign:success", {
+        userPublicKey: connectedUserPublicKey,
+        agentPublicKey: prepared.agentPublicKey,
+      });
       const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
-      const result = await submitAgentFunding(connectedUserPublicKey, signedDeployJson);
+      const result = await submitAgentFunding(
+        connectedUserPublicKey,
+        signedDeployJson,
+        prepared.agentPublicKey,
+      );
+      console.info("[fundAgent] submit:success", {
+        userPublicKey: connectedUserPublicKey,
+        agentPublicKey: prepared.agentPublicKey,
+        deployHash: result.deployHash,
+        agentBalanceCspr: result.agentBalanceCspr,
+      });
 
       setAgentBalanceCspr(result.agentBalanceCspr);
       setStatusTone("success");
@@ -1103,6 +1130,10 @@ export default function Home() {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Funding transfer failed.";
+      console.error("[fundAgent] error", {
+        userPublicKey: connectedUserPublicKey,
+        message,
+      });
       setStatusTone("danger");
       setStatusMessage(message);
     } finally {
@@ -1268,7 +1299,7 @@ export default function Home() {
             <header className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[12px] bg-[var(--surface-accent)] text-[var(--accent-strong)]">
-                  <ShieldCheckIcon />
+                  <SentryAgentMark />
                 </div>
                 <div>
                   <p className="text-[20px] font-semibold tracking-[-0.02em] text-[var(--text)]">SentryAgent</p>
