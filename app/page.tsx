@@ -2,7 +2,11 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { createMockPaymentRequest, type CasperPaymentRequest } from "@/lib/casper";
+import {
+  checkAndRecordOnCasper,
+  createMockPaymentRequest,
+  type CasperPaymentRequest,
+} from "@/lib/casper";
 import { evaluatePaymentRequest, type Policy, type SpendSnapshot } from "@/lib/policy";
 import { runMockX402ComplianceCheck } from "@/lib/x402";
 
@@ -28,6 +32,8 @@ type ActivityItem = CasperPaymentRequest & {
   reasonCode: DecisionReasonCode;
   checkedAt?: number;
   complianceCost?: number;
+  source?: "mock" | "casper";
+  deployHash?: string;
 };
 
 type ThemeVars = CSSProperties & Record<`--${string}`, string>;
@@ -137,6 +143,10 @@ function formatShortEndpoint(endpoint: string) {
 
 function formatWalletAddress() {
   return "0x82..4F1";
+}
+
+function shortDeployHash(hash: string) {
+  return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 }
 
 function hashString(value: string) {
@@ -626,7 +636,7 @@ function ActivityRow({
             {formatShortEndpoint(item.endpoint)}
           </span>
         </p>
-        {item.status !== "approved" ? (
+        {item.reason ? (
           <p className="mt-1 truncate text-[12px] text-[var(--muted)]">{item.reason}</p>
         ) : null}
       </div>
@@ -719,6 +729,8 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>("landing");
   const [policy, setPolicy] = useState<Policy>(initialPolicy);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
+  const [casperLiveEnabled, setCasperLiveEnabled] = useState(false);
+  const [isSubmittingLiveCasper, setIsSubmittingLiveCasper] = useState(false);
   const [chartRange, setChartRange] = useState<ChartRange>("24H");
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [editingField, setEditingField] = useState<PolicyField | null>(null);
@@ -806,9 +818,48 @@ export default function Home() {
     [policy],
   );
 
-  const firePayment = useCallback(() => {
+  const firePayment = useCallback(async () => {
     const request = createMockPaymentRequest(requestIndex.current);
     requestIndex.current += 1;
+
+    if (casperLiveEnabled) {
+      setIsSubmittingLiveCasper(true);
+
+      try {
+        const result = await checkAndRecordOnCasper(request);
+        const nextItem: ActivityItem = {
+          ...request,
+          status: result.status,
+          reasonCode: result.status === "approved" ? "allowlisted" : "per_call_cap",
+          reason:
+            result.status === "approved"
+              ? `Casper testnet approved ${result.onchainAmount} cents via ${shortDeployHash(result.deployHash)}.`
+              : `Casper testnet blocked ${result.onchainAmount} cents at the onchain cap via ${shortDeployHash(result.deployHash)}.`,
+          checkedAt: Date.now(),
+          source: "casper",
+          deployHash: result.deployHash,
+        };
+
+        setActivityLog((current) => [nextItem, ...current]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Casper testnet request failed.";
+        setActivityLog((current) => [
+          {
+            ...request,
+            status: "blocked",
+            reasonCode: "per_call_cap",
+            reason: `Casper testnet call failed: ${message}`,
+            checkedAt: Date.now(),
+            source: "casper",
+          },
+          ...current,
+        ]);
+      } finally {
+        setIsSubmittingLiveCasper(false);
+      }
+
+      return;
+    }
 
     setActivityLog((current) => {
       const liveSnapshot: SpendSnapshot = {
@@ -834,7 +885,7 @@ export default function Home() {
 
       return [nextItem, ...current];
     });
-  }, [policy, settleComplianceCheck]);
+  }, [casperLiveEnabled, policy, settleComplianceCheck]);
 
   const visibleActivity = useMemo(() => activityLog.slice(0, 6), [activityLog]);
   const checkingCount = activityLog.filter((item) => item.status === "checking").length;
@@ -982,14 +1033,31 @@ export default function Home() {
                 <button
                   className="inline-flex h-14 items-center gap-2 rounded-full bg-[var(--accent)] px-6 text-[16px] font-medium text-[var(--button-ink)] transition-opacity hover:opacity-90"
                   type="button"
+                  disabled={isSubmittingLiveCasper}
                   onClick={firePayment}
                 >
                   <PlayIcon />
-                  Fire request
+                  {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
+                </button>
+                <button
+                  className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors ${
+                    casperLiveEnabled
+                      ? "border-[var(--accent)] bg-[var(--surface-accent)] text-[var(--accent-strong)]"
+                      : "border-[var(--border)] bg-[var(--button-secondary)] text-[var(--muted)]"
+                  }`}
+                  type="button"
+                  onClick={() => setCasperLiveEnabled((current) => !current)}
+                >
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      casperLiveEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted)]"
+                    }`}
+                  />
+                  {casperLiveEnabled ? "Casper testnet live" : "Mock agent online"}
                 </button>
                 <div className="inline-flex h-14 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--button-secondary)] px-6 text-[15px] text-[var(--muted)]">
                   <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)]" />
-                  Mock agent online
+                  {casperLiveEnabled ? "Next click uses onchain cap" : "Policy engine local"}
                 </div>
               </div>
             </div>

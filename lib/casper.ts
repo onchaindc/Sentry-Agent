@@ -7,6 +7,13 @@ export type CasperPaymentRequest = {
   purpose: string;
 };
 
+export type CasperCheckAndRecordResult = {
+  status: "approved" | "blocked";
+  deployHash: string;
+  eventName?: string;
+  onchainAmount: string;
+};
+
 const merchants = [
   {
     merchant: "CasperIndex",
@@ -60,4 +67,26 @@ export async function getMockWalletBalance() {
     address: "casper-testnet-agent-02",
     availableCspr: 1824.42,
   };
+}
+
+export async function checkAndRecordOnCasper(request: CasperPaymentRequest) {
+  const response = await fetch("/api/casper/check-and-record", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      paymentRequestId: request.id,
+      amount: request.amount,
+      endpoint: request.endpoint,
+      merchant: request.merchant,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? "Failed to call Casper testnet.");
+  }
+
+  return (await response.json()) as CasperCheckAndRecordResult;
 }
