@@ -26,7 +26,7 @@ export type ActivityItem = CasperPaymentRequest & {
   reasonCode: DecisionReasonCode;
   checkedAt?: number;
   complianceCost?: number;
-  source?: "mock" | "casper";
+  source?: "mock" | "casper" | "x402";
   deployHash?: string;
 };
 

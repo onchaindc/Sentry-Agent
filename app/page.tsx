@@ -17,7 +17,7 @@ import {
   type UserAgentSession,
 } from "@/lib/casper";
 import { defaultPolicy, evaluatePaymentRequest, type Policy, type SpendSnapshot } from "@/lib/policy";
-import { runMockX402ComplianceCheck } from "@/lib/x402";
+import { runMockX402ComplianceCheck, runRealX402ComplianceCheck } from "@/lib/x402";
 
 type ThemeMode = "dark" | "light";
 type ActivityFilter = "all" | "approved" | "blocked";
@@ -786,6 +786,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState("");
   const [statusTone, setStatusTone] = useState<"neutral" | "success" | "danger">("neutral");
   const [hasLoadedSession, setHasLoadedSession] = useState(false);
+  const [latestX402Trace, setLatestX402Trace] = useState<string[]>([]);
   const requestIndex = useRef(0);
 
   const isWalletConnected = Boolean(connectedUserPublicKey);
@@ -958,7 +959,15 @@ export default function Home() {
 
   const settleComplianceCheck = useCallback(
     async (request: CasperPaymentRequest) => {
-      const result = await runMockX402ComplianceCheck(request);
+      const result =
+        request.merchant === "RiskLens" && connectedUserPublicKey
+          ? await runRealX402ComplianceCheck(connectedUserPublicKey, request)
+          : await runMockX402ComplianceCheck(request);
+
+      if (result.trace?.length) {
+        setLatestX402Trace(result.trace);
+        console.info("[SentryAgent x402]", result.trace.join("\n"));
+      }
 
       setActivityLog((current) =>
         current.map((item) => {
@@ -994,11 +1003,12 @@ export default function Home() {
             ),
             checkedAt: Date.now(),
             complianceCost: result.meteredCost,
+            source: result.trace?.length ? "x402" : item.source,
           };
         }),
       );
     },
-    [policy],
+    [connectedUserPublicKey, policy],
   );
 
   const fundAgent = useCallback(async () => {
@@ -1440,6 +1450,24 @@ export default function Home() {
                 }}
               />
             </section>
+
+            {latestX402Trace.length ? (
+              <section className="mb-6 rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-6 sm:px-7">
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <p className="text-[13px] uppercase tracking-[0.18em] text-[var(--muted)]">x402 trace</p>
+                    <h3 className="mt-3 text-[24px] font-semibold tracking-[-0.03em] text-[var(--text)]">
+                      RiskLens paid request sequence
+                    </h3>
+                  </div>
+                  <div className="space-y-2 font-mono text-[13px] leading-[1.7] text-[var(--muted)]">
+                    {latestX402Trace.map((entry) => (
+                      <p key={entry}>{entry}</p>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
             <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
               <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
