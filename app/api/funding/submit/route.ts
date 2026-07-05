@@ -13,6 +13,8 @@ type WalletSignaturePayload = {
   signature?: string;
   publicKey?: string;
   deploy?: unknown;
+  signedDeploy?: unknown;
+  transaction?: unknown;
   approval?: {
     signer?: string;
     signature?: string;
@@ -50,6 +52,16 @@ function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: stri
   }
 
   const walletPayload = signedParsed as WalletSignaturePayload;
+
+  const embeddedDeploy =
+    walletPayload.deploy ??
+    walletPayload.signedDeploy ??
+    walletPayload.transaction;
+
+  if (embeddedDeploy && typeof embeddedDeploy === "object") {
+    return JSON.stringify(embeddedDeploy);
+  }
+
   const approvalSigner =
     walletPayload.approval?.signer ??
     walletPayload.publicKey;
