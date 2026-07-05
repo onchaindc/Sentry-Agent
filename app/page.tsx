@@ -448,7 +448,7 @@ function RobotIcon() {
 }
 
 function SentryAgentMark() {
-  return <img alt="" className="h-5 w-5 flex-none" src="/sentryagent-mark.svg" />;
+  return <img alt="" className="h-5 w-5 flex-none object-contain" src="/sentryagent-logo.png" />;
 }
 
 function AppChrome({

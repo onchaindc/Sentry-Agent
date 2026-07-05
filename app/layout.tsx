@@ -5,9 +5,9 @@ export const metadata: Metadata = {
   title: "SentryAgent",
   description: "Spend-policy guardrails for autonomous AI wallets on Casper Network.",
   icons: {
-    icon: "/sentryagent-favicon.svg",
-    shortcut: "/sentryagent-favicon.svg",
-    apple: "/sentryagent-favicon.svg",
+    icon: "/sentryagent-logo.png",
+    shortcut: "/sentryagent-logo.png",
+    apple: "/sentryagent-logo.png",
   },
 };
 
