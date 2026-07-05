@@ -1,6 +1,7 @@
 .next
 node_modules
 .data/
+.env.local
 work
 outputs
 .next-dev.log
