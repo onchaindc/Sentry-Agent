@@ -1113,10 +1113,12 @@ export default function Home() {
         agentPublicKey: prepared.agentPublicKey,
       });
       const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
+      const originalDeployJson = JSON.stringify(prepared.deployJson);
       const result = await submitAgentFunding(
         connectedUserPublicKey,
         signedDeployJson,
         prepared.agentPublicKey,
+        originalDeployJson,
       );
       console.info("[fundAgent] submit:success", {
         userPublicKey: connectedUserPublicKey,

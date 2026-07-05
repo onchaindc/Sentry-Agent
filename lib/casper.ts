@@ -153,11 +153,17 @@ export async function prepareAgentFunding(userPublicKey: string, amountCspr: str
   return postJson<FundingPrepareResponse>("/api/funding/prepare", { userPublicKey, amountCspr });
 }
 
-export async function submitAgentFunding(userPublicKey: string, signedDeployJson: string, agentPublicKey: string) {
+export async function submitAgentFunding(
+  userPublicKey: string,
+  signedDeployJson: string,
+  agentPublicKey: string,
+  originalDeployJson: string,
+) {
   return postJson<FundingSubmitResponse>("/api/funding/submit", {
     userPublicKey,
     signedDeployJson,
     agentPublicKey,
+    originalDeployJson,
   });
 }
 
