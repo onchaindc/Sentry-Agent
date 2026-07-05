@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAgentWallet, getPublicKeyBalance } from "@/lib/casper-server";
+import { createDeterministicAgentWallet, getPublicKeyBalance } from "@/lib/casper-server";
 import { ensureUserRecord } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A connected wallet public key is required." }, { status: 400 });
     }
 
-    const record = await ensureUserRecord(payload.userPublicKey, createAgentWallet);
+    const record = await ensureUserRecord(payload.userPublicKey, createDeterministicAgentWallet);
     const agentBalanceCspr = await getPublicKeyBalance(record.agent.publicKey).catch(() => 0);
 
     return NextResponse.json({

@@ -1105,6 +1105,8 @@ export default function Home() {
         agentPublicKey: prepared.agentPublicKey,
         agentAccountHash: prepared.agentAccountHash,
       });
+      setAgentPublicKey(prepared.agentPublicKey);
+      setAgentAccountHash(prepared.agentAccountHash);
       const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
       console.info("[fundAgent] sign:success", {
         userPublicKey: connectedUserPublicKey,

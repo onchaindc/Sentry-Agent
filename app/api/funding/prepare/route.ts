@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { buildFundingTransferDeploy } from "@/lib/casper-server";
+import { buildFundingTransferDeploy, createDeterministicAgentWallet } from "@/lib/casper-server";
 import { getUserRecord } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       amountCspr: payload.amountCspr,
     });
 
-    const record = await getUserRecord(payload.userPublicKey);
+    const record = await getUserRecord(payload.userPublicKey, createDeterministicAgentWallet);
     if (!record) {
       console.warn("[funding.prepare] session-missing", {
         traceId,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createDeterministicAgentWallet } from "@/lib/casper-server";
 import { getUserRecord } from "@/lib/user-store";
 import { signRiskLensPayload } from "@/lib/x402-server";
 import type { CasperPaymentRequest } from "@/lib/casper";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Payment request payload is required." }, { status: 400 });
     }
 
-    const user = await getUserRecord(payload.userPublicKey);
+    const user = await getUserRecord(payload.userPublicKey, createDeterministicAgentWallet);
     if (!user) {
       return NextResponse.json({ error: "User session not found." }, { status: 404 });
     }

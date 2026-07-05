@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { ActivityItem } from "@/lib/casper";
-import { getPublicKeyBalance } from "@/lib/casper-server";
+import { createDeterministicAgentWallet, getPublicKeyBalance } from "@/lib/casper-server";
 import { updateUserActivity } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Activity payload must be an array." }, { status: 400 });
     }
 
-    const record = await updateUserActivity(payload.userPublicKey, payload.activity);
+    const record = await updateUserActivity(payload.userPublicKey, payload.activity, createDeterministicAgentWallet);
     const agentBalanceCspr = await getPublicKeyBalance(record.agent.publicKey).catch(() => 0);
 
     return NextResponse.json({

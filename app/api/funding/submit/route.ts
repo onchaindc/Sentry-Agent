@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getPublicKeyBalance, submitSignedTransferDeploy } from "@/lib/casper-server";
+import { createDeterministicAgentWallet, getPublicKeyBalance, submitSignedTransferDeploy } from "@/lib/casper-server";
 import { getUserRecord } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       signedDeployLength: payload.signedDeployJson.length,
     });
 
-    const record = await getUserRecord(payload.userPublicKey);
+    const record = await getUserRecord(payload.userPublicKey, createDeterministicAgentWallet);
     const fallbackAgentPublicKey = payload.agentPublicKey?.trim();
 
     console.info("[funding.submit] session-lookup", {

@@ -27,6 +27,8 @@ type StoreShape = {
   users: Record<string, UserRecord>;
 };
 
+type CreateAgentForUser = (userPublicKey: string) => Promise<AgentRecord>;
+
 function normalizePublicKey(value: string) {
   return value.trim();
 }
@@ -53,15 +55,27 @@ async function writeStore(store: StoreShape) {
   await writeFile(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
 }
 
-export async function getUserRecord(userPublicKey: string) {
-  const store = await readStore();
-  return store.users[normalizePublicKey(userPublicKey)] ?? null;
+async function createDefaultRecord(
+  store: StoreShape,
+  normalizedKey: string,
+  createAgent: CreateAgentForUser,
+) {
+  const now = Date.now();
+  const nextRecord: UserRecord = {
+    userPublicKey: normalizedKey,
+    agent: await createAgent(normalizedKey),
+    policy: defaultPolicy,
+    activity: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.users[normalizedKey] = nextRecord;
+
+  return nextRecord;
 }
 
-export async function ensureUserRecord(
-  userPublicKey: string,
-  createAgent: () => Promise<AgentRecord>,
-) {
+export async function getUserRecord(userPublicKey: string, createAgent?: CreateAgentForUser) {
   const normalizedKey = normalizePublicKey(userPublicKey);
   const store = await readStore();
   const existing = store.users[normalizedKey];
@@ -70,26 +84,35 @@ export async function ensureUserRecord(
     return existing;
   }
 
-  const now = Date.now();
-  const nextRecord: UserRecord = {
-    userPublicKey: normalizedKey,
-    agent: await createAgent(),
-    policy: defaultPolicy,
-    activity: [],
-    createdAt: now,
-    updatedAt: now,
-  };
+  if (!createAgent) {
+    return null;
+  }
 
-  store.users[normalizedKey] = nextRecord;
+  const nextRecord = await createDefaultRecord(store, normalizedKey, createAgent);
   await writeStore(store);
-
   return nextRecord;
 }
 
-export async function updateUserPolicy(userPublicKey: string, policy: Policy) {
+export async function ensureUserRecord(
+  userPublicKey: string,
+  createAgent: CreateAgentForUser,
+) {
+  const record = await getUserRecord(userPublicKey, createAgent);
+  if (!record) {
+    throw new Error("User session not found.");
+  }
+
+  return record;
+}
+
+export async function updateUserPolicy(
+  userPublicKey: string,
+  policy: Policy,
+  createAgent?: CreateAgentForUser,
+) {
   const normalizedKey = normalizePublicKey(userPublicKey);
   const store = await readStore();
-  const record = store.users[normalizedKey];
+  const record = store.users[normalizedKey] ?? (createAgent ? await createDefaultRecord(store, normalizedKey, createAgent) : null);
 
   if (!record) {
     throw new Error("User session not found.");
@@ -107,10 +130,14 @@ export async function updateUserPolicy(userPublicKey: string, policy: Policy) {
   return nextRecord;
 }
 
-export async function updateUserActivity(userPublicKey: string, activity: ActivityItem[]) {
+export async function updateUserActivity(
+  userPublicKey: string,
+  activity: ActivityItem[],
+  createAgent?: CreateAgentForUser,
+) {
   const normalizedKey = normalizePublicKey(userPublicKey);
   const store = await readStore();
-  const record = store.users[normalizedKey];
+  const record = store.users[normalizedKey] ?? (createAgent ? await createDefaultRecord(store, normalizedKey, createAgent) : null);
 
   if (!record) {
     throw new Error("User session not found.");

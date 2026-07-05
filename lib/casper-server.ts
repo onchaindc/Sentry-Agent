@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { createHmac } from "node:crypto";
 import type * as CasperSdk from "casper-js-sdk";
 import type { AgentRecord } from "./user-store";
 
@@ -29,6 +30,10 @@ const TRANSFER_PAYMENT_AMOUNT = "100000000";
 const EVENT_LENGTH_KEY = "__events_length";
 const EVENTS_DICT_KEY = "__events";
 const CSPR_MOTES = BigInt("1000000000");
+const AGENT_DERIVATION_SECRET =
+  process.env.SENTRY_AGENT_SEED_SECRET ??
+  process.env.CSPR_CLOUD_ACCESS_TOKEN ??
+  "sentry-agent-demo-secret";
 
 type RpcEnvelope<T> =
   | {
@@ -311,6 +316,34 @@ async function waitForDeployResult(deployHash: string) {
 
 export async function createAgentWallet(): Promise<AgentRecord> {
   const privateKey = PrivateKey.generate(KeyAlgorithm.SECP256K1);
+  const publicKey = privateKey.publicKey;
+
+  return {
+    publicKey: publicKey.toHex(),
+    accountHash: publicKey.accountHash().toPrefixedString(),
+    privateKeyPem: privateKey.toPem(),
+    algorithm: "secp256k1",
+  };
+}
+
+function deriveAgentPrivateKey(userPublicKey: string) {
+  for (let attempt = 0; attempt < 256; attempt += 1) {
+    const seedHex = createHmac("sha256", AGENT_DERIVATION_SECRET)
+      .update(`sentry-agent:${userPublicKey}:${attempt}`)
+      .digest("hex");
+
+    try {
+      return PrivateKey.fromHex(seedHex, KeyAlgorithm.SECP256K1);
+    } catch {
+      // try another counter if the candidate lands outside the curve range
+    }
+  }
+
+  throw new Error("Failed to derive a deterministic agent private key.");
+}
+
+export async function createDeterministicAgentWallet(userPublicKey: string): Promise<AgentRecord> {
+  const privateKey = deriveAgentPrivateKey(userPublicKey);
   const publicKey = privateKey.publicKey;
 
   return {

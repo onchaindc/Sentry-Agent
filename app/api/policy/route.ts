@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { defaultPolicy, type Policy } from "@/lib/policy";
-import { getPublicKeyBalance } from "@/lib/casper-server";
+import { createDeterministicAgentWallet, getPublicKeyBalance } from "@/lib/casper-server";
 import { getUserRecord, updateUserPolicy } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const record = await updateUserPolicy(payload.userPublicKey, {
       ...nextPolicy,
       dailyCallLimit: Math.max(1, Math.round(nextPolicy.dailyCallLimit)),
-    });
+    }, createDeterministicAgentWallet);
     const agentBalanceCspr = await getPublicKeyBalance(record.agent.publicKey).catch(() => 0);
 
     return NextResponse.json({
