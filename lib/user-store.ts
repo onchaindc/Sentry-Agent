@@ -3,7 +3,9 @@ import { dirname, join } from "node:path";
 import { defaultPolicy, type Policy } from "./policy";
 import type { ActivityItem } from "./casper";
 
-const STORE_PATH = join(process.cwd(), ".data", "sentry-agent-store.json");
+const STORE_PATH =
+  process.env.SENTRY_AGENT_STORE_PATH ??
+  (process.env.VERCEL ? join("/tmp", "sentry-agent-store.json") : join(process.cwd(), ".data", "sentry-agent-store.json"));
 
 export type AgentRecord = {
   publicKey: string;
