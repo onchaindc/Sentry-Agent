@@ -12,9 +12,14 @@ const { Deploy, PublicKey } = require("casper-js-sdk") as typeof import("casper-
 type WalletSignaturePayload = {
   signature?: string;
   publicKey?: string;
+  public_key?: string;
   deploy?: unknown;
   signedDeploy?: unknown;
+  signed_deploy?: unknown;
   transaction?: unknown;
+  result?: unknown;
+  data?: unknown;
+  payload?: unknown;
   approval?: {
     signer?: string;
     signature?: string;
@@ -32,6 +37,76 @@ function tryParseJson(value: string) {
 function hexToBytes(value: string) {
   const normalized = value.startsWith("0x") ? value.slice(2) : value;
   return Uint8Array.from(Buffer.from(normalized, "hex"));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeKey(value: string) {
+  return value.replace(/[_-]/g, "").toLowerCase();
+}
+
+function findDeployLikeObject(value: unknown, visited = new Set<unknown>()): Record<string, unknown> | null {
+  if (!isRecord(value) || visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+  const keys = Object.keys(value);
+  const normalized = new Set(keys.map(normalizeKey));
+  const hasDeployShape =
+    normalized.has("hash") &&
+    normalized.has("header") &&
+    (normalized.has("payment") || normalized.has("approvals") || normalized.has("session"));
+
+  if (hasDeployShape) {
+    return value;
+  }
+
+  for (const key of keys) {
+    const nested = findDeployLikeObject(value[key], visited);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function findStringByKeys(
+  value: unknown,
+  wantedKeys: string[],
+  visited = new Set<unknown>(),
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return null;
+  }
+
+  if (!isRecord(value) || visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (wantedKeys.includes(normalizeKey(key)) && typeof nested === "string" && nested.trim()) {
+      return nested.trim();
+    }
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = findStringByKeys(nested, wantedKeys, visited);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
 }
 
 function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: string) {
@@ -52,25 +127,31 @@ function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: stri
   }
 
   const walletPayload = signedParsed as WalletSignaturePayload;
-
-  const embeddedDeploy =
+  const embeddedDeploy = findDeployLikeObject(
     walletPayload.deploy ??
-    walletPayload.signedDeploy ??
-    walletPayload.transaction;
+      walletPayload.signedDeploy ??
+      walletPayload.signed_deploy ??
+      walletPayload.transaction ??
+      walletPayload.result ??
+      walletPayload.data ??
+      walletPayload.payload ??
+      walletPayload,
+  );
 
   if (embeddedDeploy && typeof embeddedDeploy === "object") {
     return JSON.stringify(embeddedDeploy);
   }
 
   const approvalSigner =
-    walletPayload.approval?.signer ??
-    walletPayload.publicKey;
+    findStringByKeys(walletPayload, ["signer", "publickey", "publickeyhex", "public_key"]) ?? undefined;
   const approvalSignature =
-    walletPayload.approval?.signature ??
-    walletPayload.signature;
+    findStringByKeys(walletPayload, ["signature", "signaturehex", "sig"]) ?? undefined;
 
   if (!approvalSigner || !approvalSignature) {
-    throw new Error("Wallet signature response did not include an approval signer and signature.");
+    const topLevelKeys = isRecord(walletPayload) ? Object.keys(walletPayload).join(", ") : "none";
+    throw new Error(
+      `Wallet signature response did not include an approval signer and signature. Top-level keys: ${topLevelKeys || "none"}.`,
+    );
   }
 
   const deploy = Deploy.fromJSON(originalParsed);
