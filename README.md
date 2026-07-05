@@ -144,32 +144,6 @@ Then open:
 
 - `http://localhost:3000`
 
-### Live Deployment
-
-- **Vercel:** add your production URL here after deploy  
-  Example format: `https://your-project-name.vercel.app`
-
-## Vercel Environment Setup
-
-In Vercel:
-
-1. Open the project
-2. Go to **Settings**
-3. Open **Environment Variables**
-4. Add:
-   - `CSPR_CLOUD_ACCESS_TOKEN`
-   - `CSPR_CLOUD_X402_FACILITATOR_URL` (optional)
-   - `SENTRY_AGENT_STORE_PATH` (optional)
-5. Apply them to **Production**, **Preview**, and **Development**
-6. Redeploy the latest commit
-
-## Hackathon Fit
-
-**Target tracks**
-
-- Agentic AI
-- DeFi / Payments
-
 **Three Casper-native pillars used**
 
 - **Odra:** onchain spend-guardrail contract on Casper testnet
