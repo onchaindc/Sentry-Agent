@@ -109,7 +109,38 @@ function findStringByKeys(
   return null;
 }
 
-function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: string) {
+function findBooleanByKeys(
+  value: unknown,
+  wantedKeys: string[],
+  visited = new Set<unknown>(),
+): boolean | null {
+  if (!value || !isRecord(value) || visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (wantedKeys.includes(normalizeKey(key)) && typeof nested === "boolean") {
+      return nested;
+    }
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = findBooleanByKeys(nested, wantedKeys, visited);
+    if (found !== null) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function hydrateSignedDeploy(
+  originalDeployJson: string,
+  signedPayloadJson: string,
+  fallbackSignerPublicKey: string,
+) {
   const originalParsed = tryParseJson(originalDeployJson);
   if (!originalParsed) {
     throw new Error("Original deploy payload could not be parsed.");
@@ -127,6 +158,11 @@ function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: stri
   }
 
   const walletPayload = signedParsed as WalletSignaturePayload;
+  const cancelled = findBooleanByKeys(walletPayload, ["cancelled", "canceled"]);
+  if (cancelled) {
+    throw new Error("Wallet signing was cancelled.");
+  }
+
   const embeddedDeploy = findDeployLikeObject(
     walletPayload.deploy ??
       walletPayload.signedDeploy ??
@@ -143,7 +179,8 @@ function hydrateSignedDeploy(originalDeployJson: string, signedPayloadJson: stri
   }
 
   const approvalSigner =
-    findStringByKeys(walletPayload, ["signer", "publickey", "publickeyhex", "public_key"]) ?? undefined;
+    findStringByKeys(walletPayload, ["signer", "publickey", "publickeyhex", "public_key"]) ??
+    fallbackSignerPublicKey;
   const approvalSignature =
     findStringByKeys(walletPayload, ["signature", "signaturehex", "sig"]) ?? undefined;
 
@@ -215,7 +252,11 @@ export async function POST(request: Request) {
       agentPublicKey: effectiveAgentPublicKey,
     });
 
-    const hydratedSignedDeployJson = hydrateSignedDeploy(payload.originalDeployJson, payload.signedDeployJson);
+    const hydratedSignedDeployJson = hydrateSignedDeploy(
+      payload.originalDeployJson,
+      payload.signedDeployJson,
+      payload.userPublicKey,
+    );
     console.info("[funding.submit] deploy-hydrated", {
       traceId,
       signedPayloadKind: payload.signedDeployJson.trim().startsWith("{") ? "json" : "raw",
