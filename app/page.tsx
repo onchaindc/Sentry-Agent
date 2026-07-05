@@ -1326,11 +1326,10 @@ export default function Home() {
                 <span className="h-px w-10 bg-[var(--hero-line)]" />
               </div>
               <h1 className="mx-auto max-w-[1040px] text-[58px] font-semibold leading-[0.95] tracking-[-0.055em] text-[var(--text)] sm:text-[78px] lg:text-[112px] xl:text-[132px]">
-                Block risky wallet spend before funds move.
+                Guardrails for wallets that don&apos;t sleep.
               </h1>
               <p className="mt-8 max-w-[860px] text-[20px] leading-[1.7] text-[var(--muted)] sm:text-[22px]">
-                Connect a real Casper Wallet, generate a dedicated server-held agent wallet per user,
-                fund it with a signed testnet transfer, and watch spend policy decisions stream live.
+                Give your agent a wallet. Give yourself the final say.
               </p>
             </section>
 
