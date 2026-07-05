@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildRiskLensData, buildRiskLensPaymentChallenge, createPaymentResponseHeader, parsePaymentSignatureHeader } from "@/lib/x402-server";
+import {
+  buildRiskLensData,
+  buildRiskLensPaymentChallenge,
+  createPaymentResponseHeader,
+  hasRealFacilitatorAccess,
+  parsePaymentSignatureHeader,
+  settleWithRealFacilitator,
+} from "@/lib/x402-server";
 import type { X402PaymentPayload } from "@/lib/x402";
 
 export const runtime = "nodejs";
@@ -33,26 +40,30 @@ export async function GET(request: Request) {
   try {
     const paymentPayload = parsePaymentSignatureHeader(paymentSignature) as X402PaymentPayload;
     const requirement = paymentPayload.accepted;
-    const settleResponse = await fetch(new URL("/api/x402/facilitator/settle", url.origin), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        paymentPayload,
-        paymentRequirements: requirement,
-      }),
-      cache: "no-store",
-    });
+    const settlementBody = hasRealFacilitatorAccess()
+      ? await settleWithRealFacilitator(paymentPayload, requirement)
+      : await (async () => {
+          const settleResponse = await fetch(new URL("/api/x402/facilitator/settle", url.origin), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              paymentPayload,
+              paymentRequirements: requirement,
+            }),
+            cache: "no-store",
+          });
 
-    const settlementBody = (await settleResponse.json()) as {
-      success?: boolean;
-      transaction?: string;
-      network?: string;
-      payer?: string;
-      errorReason?: string;
-      errorMessage?: string;
-    };
+          return (await settleResponse.json()) as {
+            success?: boolean;
+            transaction?: string;
+            network?: string;
+            payer?: string;
+            errorReason?: string;
+            errorMessage?: string;
+          };
+        })();
 
     if (!settlementBody.success) {
       const response = NextResponse.json(
