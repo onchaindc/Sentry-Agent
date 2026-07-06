@@ -415,13 +415,69 @@ function normalizeWalletSignatureBytes(signature: unknown): Uint8Array | null {
   return null;
 }
 
+function parseMaybeJsonString(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function looksLikeDeployJson(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return "hash" in value && "header" in value && "payment" in value && "session" in value;
+}
+
+function looksLikeTransactionJson(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return "hash" in value && ("payload" in value || "Version1" in value || "transaction" in value);
+}
+
+function signatureHexToBytes(signatureHex: unknown): Uint8Array | null {
+  if (typeof signatureHex !== "string" || !signatureHex.trim()) {
+    return null;
+  }
+
+  const normalized = signatureHex.trim().replace(/^0x/, "");
+  if (!/^[a-f0-9]+$/i.test(normalized) || normalized.length % 2 !== 0) {
+    return null;
+  }
+
+  return Uint8Array.from(
+    normalized.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) ?? [],
+  );
+}
+
+function ensureCasperSignaturePrefix(signatureBytes: Uint8Array, signingPublicKeyHex: string) {
+  const keyPrefix = Number.parseInt(signingPublicKeyHex.slice(0, 2), 16);
+  if (![1, 2].includes(keyPrefix)) {
+    return signatureBytes;
+  }
+
+  if (signatureBytes[0] === keyPrefix) {
+    return signatureBytes;
+  }
+
+  return Uint8Array.from([keyPrefix, ...signatureBytes]);
+}
+
 async function buildSignedDeployJson(
   deployJson: unknown,
   signingPublicKeyHex: string,
   signResult: string | Record<string, unknown>,
 ) {
   if (typeof signResult === "string") {
-    return signResult;
+    const parsed = parseMaybeJsonString(signResult);
+    if (looksLikeDeployJson(parsed) || looksLikeTransactionJson(parsed)) {
+      return JSON.stringify(parsed);
+    }
+    throw new Error("Wallet returned a string payload that was not a signed deploy.");
   }
 
   if (!isRecord(signResult)) {
@@ -432,18 +488,27 @@ async function buildSignedDeployJson(
     throw new Error("Wallet signing was cancelled.");
   }
 
-  if (isRecord(signResult.deploy)) {
+  if (looksLikeDeployJson(signResult.deploy)) {
     return JSON.stringify(signResult.deploy);
   }
 
-  const signatureBytes = normalizeWalletSignatureBytes(signResult.signature);
+  if (looksLikeTransactionJson(signResult.transaction)) {
+    return JSON.stringify(signResult.transaction);
+  }
+
+  const signatureBytes =
+    normalizeWalletSignatureBytes(signResult.signature) ?? signatureHexToBytes(signResult.signatureHex);
   if (!signatureBytes) {
     throw new Error("Wallet signature response did not contain usable signature bytes.");
   }
 
   const sdk = await import("casper-js-sdk");
   const deploy = sdk.Deploy.fromJSON(deployJson);
-  sdk.Deploy.setSignature(deploy, signatureBytes, sdk.PublicKey.fromHex(signingPublicKeyHex));
+  sdk.Deploy.setSignature(
+    deploy,
+    ensureCasperSignaturePrefix(signatureBytes, signingPublicKeyHex),
+    sdk.PublicKey.fromHex(signingPublicKeyHex),
+  );
 
   return JSON.stringify(sdk.Deploy.toJSON(deploy));
 }
@@ -1298,7 +1363,7 @@ export default function Home() {
         const signedDeployJson = await buildSignedDeployJson(
           prepared.deployJson,
           connectedUserPublicKey,
-          typeof signed === "string" ? { signedPayload: signed } : signed,
+          signed,
         );
         console.info("[fundAgent] sign:success", {
           userPublicKey: connectedUserPublicKey,

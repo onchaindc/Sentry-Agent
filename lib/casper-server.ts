@@ -18,6 +18,7 @@ const {
   PurseIdentifier,
   RpcClient,
   StoredContractByHash,
+  Transaction,
   makeCsprTransferDeploy,
 } = require("casper-js-sdk") as typeof CasperSdk;
 
@@ -374,16 +375,39 @@ export async function buildFundingTransferDeploy(userPublicKeyHex: string, agent
 
 export async function submitSignedTransferDeploy(signedDeployJson: string) {
   const parsed = JSON.parse(signedDeployJson);
-  const deploy = Deploy.fromJSON(parsed);
   const client = getClient();
-  const putResult = await client.putDeploy(deploy);
-  const deployHash = putResult.deployHash.toHex();
 
-  await waitForDeployResult(deployHash);
+  try {
+    const deploy = Deploy.fromJSON(parsed);
+    const putResult = await client.putDeploy(deploy);
+    const deployHash = putResult.deployHash.toHex();
 
-  return {
-    deployHash,
-  };
+    await waitForDeployResult(deployHash);
+
+    return {
+      deployHash,
+    };
+  } catch (deployError) {
+    try {
+      const transaction = Transaction.fromJSON(parsed);
+      const putResult = await client.putTransaction(transaction);
+      const deployHash = putResult.transactionHash.toHex();
+
+      await waitForDeployResult(deployHash);
+
+      return {
+        deployHash,
+      };
+    } catch (transactionError) {
+      const deployMessage = deployError instanceof Error ? deployError.message : "Deploy parse failed.";
+      const transactionMessage =
+        transactionError instanceof Error ? transactionError.message : "Transaction parse failed.";
+
+      throw new Error(
+        `Signed funding payload was neither a valid Deploy nor Transaction. Deploy: ${deployMessage} Transaction: ${transactionMessage}`,
+      );
+    }
+  }
 }
 
 export async function confirmTransferDeploy(deployHash: string) {
