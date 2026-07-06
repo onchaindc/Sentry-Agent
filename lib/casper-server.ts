@@ -23,8 +23,7 @@ const {
 
 const CASPER_NODE_ADDRESS =
   process.env.CASPER_RPC_URL ??
-  process.env.ODRA_CASPER_LIVENET_NODE_ADDRESS ??
-  "https://node.testnet.cspr.cloud";
+  "https://node.testnet.casper.network/rpc";
 const CASPER_RPC_URL = CASPER_NODE_ADDRESS.endsWith("/rpc")
   ? CASPER_NODE_ADDRESS
   : `${CASPER_NODE_ADDRESS.replace(/\/$/, "")}/rpc`;
