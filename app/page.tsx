@@ -432,7 +432,7 @@ function ensureCasperSignaturePrefix(signatureBytes: Uint8Array, signingPublicKe
     return signatureBytes;
   }
 
-  if (signatureBytes[0] === keyPrefix) {
+  if (signatureBytes.length === 65 && signatureBytes[0] === keyPrefix) {
     return signatureBytes;
   }
 
