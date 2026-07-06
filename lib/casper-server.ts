@@ -18,11 +18,16 @@ const {
   PurseIdentifier,
   RpcClient,
   StoredContractByHash,
-  Transaction,
   makeCsprTransferDeploy,
 } = require("casper-js-sdk") as typeof CasperSdk;
 
-const CASPER_RPC_URL = "https://node.testnet.casper.network/rpc";
+const CASPER_NODE_ADDRESS =
+  process.env.CASPER_RPC_URL ??
+  process.env.ODRA_CASPER_LIVENET_NODE_ADDRESS ??
+  "https://node.testnet.cspr.cloud";
+const CASPER_RPC_URL = CASPER_NODE_ADDRESS.endsWith("/rpc")
+  ? CASPER_NODE_ADDRESS
+  : `${CASPER_NODE_ADDRESS.replace(/\/$/, "")}/rpc`;
 const CASPER_CHAIN_NAME = "casper-test";
 const SPEND_GUARDRAIL_CONTRACT_HASH =
   "contract-808477e815f794497a8f18b62d6ec5b70cfdf4c20da4335c65d3562122c89fe8";
@@ -31,7 +36,7 @@ const TRANSFER_PAYMENT_AMOUNT = "100000000";
 const EVENT_LENGTH_KEY = "__events_length";
 const EVENTS_DICT_KEY = "__events";
 const CSPR_MOTES = BigInt("1000000000");
-const MAX_NATIVE_TRANSFER_JSON_BYTES = 200_000;
+const MAX_NATIVE_TRANSFER_JSON_BYTES = 20_000;
 const AGENT_DERIVATION_SECRET =
   process.env.SENTRY_AGENT_SEED_SECRET ??
   process.env.CSPR_CLOUD_ACCESS_TOKEN ??
@@ -416,46 +421,55 @@ export async function submitSignedTransferDeploy(signedDeployJson: string) {
   }
 
   const parsed = JSON.parse(signedDeployJson);
-  const client = getClient();
-  let deploy: InstanceType<typeof Deploy> | null = null;
-  let deployParseError: unknown;
 
   console.info("[funding.submit] signed-payload-shape", summarizeCasperPayload(parsed, signedDeployJson));
 
+  let deploy: InstanceType<typeof Deploy>;
   try {
     deploy = Deploy.fromJSON(parsed);
   } catch (error) {
-    deployParseError = error;
+    const message = error instanceof Error ? error.message : "Deploy parse failed.";
+    throw new Error(`Signed funding deploy is invalid before submission: ${message}`);
   }
 
-  if (deploy) {
-    const putResult = await client.putDeploy(deploy);
-    const deployHash = putResult.deployHash.toHex();
+  const compactDeployJson = Deploy.toJSON(deploy);
+  const rpcBody = JSON.stringify({
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: "account_put_deploy",
+    params: {
+      deploy: compactDeployJson,
+    },
+  });
+  const rpcBodyByteSize = byteLength(rpcBody);
 
-    await waitForDeployResult(deployHash);
+  console.info("[funding.submit] account-put-deploy-rpc-body", {
+    rpcUrl: CASPER_RPC_URL,
+    byteSize: rpcBodyByteSize,
+  });
 
-    return {
-      deployHash,
-    };
-  }
-
-  try {
-    const transaction = Transaction.fromJSON(parsed);
-    const putResult = await client.putTransaction(transaction);
-    const deployHash = putResult.transactionHash.toHex();
-
-    return {
-      deployHash,
-    };
-  } catch (transactionError) {
-    const deployMessage = deployParseError instanceof Error ? deployParseError.message : "Deploy parse failed.";
-    const transactionMessage =
-      transactionError instanceof Error ? transactionError.message : "Transaction parse failed.";
-
+  if (rpcBodyByteSize > MAX_NATIVE_TRANSFER_JSON_BYTES) {
     throw new Error(
-      `Signed funding payload was neither a valid Deploy nor Transaction. Deploy: ${deployMessage} Transaction: ${transactionMessage}`,
+      `Funding deploy RPC body is ${rpcBodyByteSize} bytes before submission. A native CSPR transfer should be compact.`,
     );
   }
+
+  const putResult = await rpcRequest<{
+    deploy_hash?: string;
+  }>("account_put_deploy", {
+    deploy: compactDeployJson,
+  });
+  const deployHash = putResult.deploy_hash;
+
+  if (!deployHash) {
+    throw new Error("Casper RPC did not return a deploy hash for the funding transfer.");
+  }
+
+  await waitForDeployResult(deployHash);
+
+  return {
+    deployHash,
+  };
 }
 
 export async function confirmTransferDeploy(deployHash: string) {
