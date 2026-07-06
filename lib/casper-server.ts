@@ -31,6 +31,7 @@ const TRANSFER_PAYMENT_AMOUNT = "100000000";
 const EVENT_LENGTH_KEY = "__events_length";
 const EVENTS_DICT_KEY = "__events";
 const CSPR_MOTES = BigInt("1000000000");
+const MAX_NATIVE_TRANSFER_JSON_BYTES = 200_000;
 const AGENT_DERIVATION_SECRET =
   process.env.SENTRY_AGENT_SEED_SECRET ??
   process.env.CSPR_CLOUD_ACCESS_TOKEN ??
@@ -115,6 +116,38 @@ function motesToCspr(value: string) {
   }
 
   return Number(`${whole}.${fraction.toString().padStart(9, "0").replace(/0+$/, "")}`);
+}
+
+function byteLength(value: string) {
+  return Buffer.byteLength(value, "utf8");
+}
+
+function summarizeCasperPayload(value: unknown, rawJson: string) {
+  const record = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  const sessionJson = JSON.stringify(record.session ?? record.payload ?? {});
+  const approvals = Array.isArray(record.approvals) ? record.approvals : [];
+  const firstApproval = approvals[0];
+
+  return {
+    byteSize: byteLength(rawJson),
+    topLevelKeys: Object.keys(record),
+    approvalCount: approvals.length,
+    approvalSignatureChars:
+      typeof firstApproval === "object" &&
+      firstApproval !== null &&
+      typeof (firstApproval as Record<string, unknown>).signature === "string"
+        ? ((firstApproval as Record<string, string>).signature.length)
+        : null,
+    paymentKeys:
+      typeof record.payment === "object" && record.payment !== null
+        ? Object.keys(record.payment as Record<string, unknown>)
+        : null,
+    sessionKeys:
+      typeof record.session === "object" && record.session !== null
+        ? Object.keys(record.session as Record<string, unknown>)
+        : null,
+    hasModuleBytes: sessionJson.includes("ModuleBytes") || sessionJson.includes("module_bytes"),
+  };
 }
 
 async function rpcRequest<T>(method: string, params?: Record<string, unknown>) {
@@ -374,10 +407,20 @@ export async function buildFundingTransferDeploy(userPublicKeyHex: string, agent
 }
 
 export async function submitSignedTransferDeploy(signedDeployJson: string) {
+  const signedPayloadByteSize = byteLength(signedDeployJson);
+
+  if (signedPayloadByteSize > MAX_NATIVE_TRANSFER_JSON_BYTES) {
+    throw new Error(
+      `Signed funding payload is ${signedPayloadByteSize} bytes before RPC submission. A native CSPR transfer should be compact.`,
+    );
+  }
+
   const parsed = JSON.parse(signedDeployJson);
   const client = getClient();
   let deploy: InstanceType<typeof Deploy> | null = null;
   let deployParseError: unknown;
+
+  console.info("[funding.submit] signed-payload-shape", summarizeCasperPayload(parsed, signedDeployJson));
 
   try {
     deploy = Deploy.fromJSON(parsed);

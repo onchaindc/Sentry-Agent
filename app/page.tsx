@@ -303,94 +303,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function extractWalletDeployHash(value: unknown, visited = new Set<unknown>()): string | null {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (
-      /^([a-f0-9]{64}|deploy-[a-f0-9]{64}|transaction-[a-f0-9]{64})$/i.test(trimmed)
-    ) {
-      return trimmed;
-    }
-    return null;
-  }
-
-  if (!isRecord(value) || visited.has(value)) {
-    return null;
-  }
-
-  visited.add(value);
-
-  for (const [key, nested] of Object.entries(value)) {
-    const normalized = key.replace(/[_-]/g, "").toLowerCase();
-    if (
-      ["deployhash", "transactionhash", "hash"].includes(normalized) &&
-      typeof nested === "string" &&
-      nested.trim()
-    ) {
-      return nested.trim();
-    }
-  }
-
-  for (const nested of Object.values(value)) {
-    const found = extractWalletDeployHash(nested, visited);
-    if (found) {
-      return found;
-    }
-  }
-
-  return null;
+function getJsonByteSize(value: string) {
+  return new TextEncoder().encode(value).length;
 }
 
-async function sendDeployWithWallet(
-  provider: WalletProvider,
-  deployJson: unknown,
-  publicKeyHex: string,
-) {
-  if (typeof provider.send !== "function") {
-    return null;
+function summarizeFundingPayloadJson(payloadJson: string) {
+  const parsed = parseMaybeJsonString(payloadJson);
+
+  if (!isRecord(parsed)) {
+    return {
+      kind: "unparseable",
+      byteSize: getJsonByteSize(payloadJson),
+    };
   }
 
-  const attempts: Array<{ args: unknown[]; label: string }> = [
-    { args: [JSON.stringify(deployJson), publicKeyHex, "casper-test"], label: "json+pk+chain" },
-    { args: [JSON.stringify(deployJson), publicKeyHex], label: "json+pk" },
-    { args: [deployJson, publicKeyHex, "casper-test"], label: "object+pk+chain" },
-    { args: [deployJson, publicKeyHex], label: "object+pk" },
-  ];
-
-  let lastError: Error | null = null;
-
-  for (const attempt of attempts) {
-    try {
-      const result = await provider.send(...attempt.args);
-      const deployHash = extractWalletDeployHash(result);
-
-      if (!deployHash) {
-        throw new Error(`Wallet send did not return a deploy hash for ${attempt.label}.`);
-      }
-
-      return {
-        deployHash,
-        label: attempt.label,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Wallet send failed.");
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  return null;
+  return {
+    kind: looksLikeDeployJson(parsed) ? "deploy" : looksLikeTransactionJson(parsed) ? "transaction" : "unknown",
+    byteSize: getJsonByteSize(payloadJson),
+    topLevelKeys: Object.keys(parsed),
+    approvalCount: Array.isArray(parsed.approvals) ? parsed.approvals.length : 0,
+    approvalSignatureChars:
+      Array.isArray(parsed.approvals) &&
+      isRecord(parsed.approvals[0]) &&
+      typeof parsed.approvals[0].signature === "string"
+        ? parsed.approvals[0].signature.length
+        : null,
+    paymentKeys: isRecord(parsed.payment) ? Object.keys(parsed.payment) : null,
+    sessionKeys: isRecord(parsed.session) ? Object.keys(parsed.session) : null,
+    hasModuleBytes: JSON.stringify(parsed.session ?? {}).includes("ModuleBytes"),
+  };
 }
 
 function normalizeWalletSignatureBytes(signature: unknown): Uint8Array | null {
   if (!signature) {
     return null;
+  }
+
+  if (typeof signature === "string") {
+    return signatureHexToBytes(signature);
   }
 
   if (signature instanceof Uint8Array) {
@@ -445,7 +395,10 @@ function signatureHexToBytes(signatureHex: unknown): Uint8Array | null {
   }
 
   const normalized = signatureHex.trim().replace(/^0x/, "");
-  if (!/^[a-f0-9]+$/i.test(normalized) || normalized.length % 2 !== 0) {
+  if (
+    !/^[a-f0-9]+$/i.test(normalized) ||
+    ![128, 130].includes(normalized.length)
+  ) {
     return null;
   }
 
@@ -454,7 +407,17 @@ function signatureHexToBytes(signatureHex: unknown): Uint8Array | null {
   );
 }
 
+function isCasperSignatureLength(signatureBytes: Uint8Array) {
+  return signatureBytes.length === 64 || signatureBytes.length === 65;
+}
+
 function ensureCasperSignaturePrefix(signatureBytes: Uint8Array, signingPublicKeyHex: string) {
+  if (!isCasperSignatureLength(signatureBytes)) {
+    throw new Error(
+      `Wallet returned a ${signatureBytes.length}-byte signature. Casper deploy approvals require 64 raw bytes or 65 prefixed bytes.`,
+    );
+  }
+
   const keyPrefix = Number.parseInt(signingPublicKeyHex.slice(0, 2), 16);
   if (![1, 2].includes(keyPrefix)) {
     return signatureBytes;
@@ -486,9 +449,17 @@ async function buildSignedDeployJson(
 
   const buildFromSignature = (signatureBytes: Uint8Array) => {
     const deploy = sdk.Deploy.fromJSON(deployJson);
+    const prefixedSignature = ensureCasperSignaturePrefix(signatureBytes, signingPublicKeyHex);
+
+    if (prefixedSignature.length !== 65) {
+      throw new Error(
+        `Wallet returned a ${prefixedSignature.length}-byte signature after Casper prefix normalization.`,
+      );
+    }
+
     sdk.Deploy.setSignature(
       deploy,
-      ensureCasperSignaturePrefix(signatureBytes, signingPublicKeyHex),
+      prefixedSignature,
       sdk.PublicKey.fromHex(signingPublicKeyHex),
     );
 
@@ -1365,48 +1336,26 @@ export default function Home() {
         userPublicKey: connectedUserPublicKey,
         agentPublicKey: prepared.agentPublicKey,
         agentAccountHash: prepared.agentAccountHash,
+        preparedPayload: summarizeFundingPayloadJson(JSON.stringify(prepared.deployJson)),
       });
       setAgentPublicKey(prepared.agentPublicKey);
       setAgentAccountHash(prepared.agentAccountHash);
-      let result;
-
-      try {
-        const walletSent = await sendDeployWithWallet(provider, prepared.deployJson, connectedUserPublicKey);
-
-        if (walletSent?.deployHash) {
-          console.info("[fundAgent] send:success", {
-            userPublicKey: connectedUserPublicKey,
-            agentPublicKey: prepared.agentPublicKey,
-            deployHash: walletSent.deployHash,
-            attempt: walletSent.label,
-          });
-          result = await submitAgentFunding(connectedUserPublicKey, {
-            deployHash: walletSent.deployHash,
-            agentPublicKey: prepared.agentPublicKey,
-          });
-        } else {
-          throw new Error("Wallet send API unavailable.");
-        }
-      } catch (sendError) {
-        console.warn("[fundAgent] send:fallback-to-sign", {
-          userPublicKey: connectedUserPublicKey,
-          message: sendError instanceof Error ? sendError.message : "Wallet send failed.",
-        });
-        const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
-        const signedDeployJson = await buildSignedDeployJson(
-          prepared.deployJson,
-          connectedUserPublicKey,
-          signed,
-        );
-        console.info("[fundAgent] sign:success", {
-          userPublicKey: connectedUserPublicKey,
-          agentPublicKey: prepared.agentPublicKey,
-        });
-        result = await submitAgentFunding(connectedUserPublicKey, {
-          signedDeployJson,
-          agentPublicKey: prepared.agentPublicKey,
-        });
-      }
+      const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+      const signedDeployJson = await buildSignedDeployJson(
+        prepared.deployJson,
+        connectedUserPublicKey,
+        signed,
+      );
+      console.info("[fundAgent] signed payload before submit", {
+        userPublicKey: connectedUserPublicKey,
+        agentPublicKey: prepared.agentPublicKey,
+        summary: summarizeFundingPayloadJson(signedDeployJson),
+        signedDeployJson,
+      });
+      const result = await submitAgentFunding(connectedUserPublicKey, {
+        signedDeployJson,
+        agentPublicKey: prepared.agentPublicKey,
+      });
 
       console.info("[fundAgent] submit:success", {
         userPublicKey: connectedUserPublicKey,
