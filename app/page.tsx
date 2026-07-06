@@ -36,7 +36,11 @@ declare global {
           getActivePublicKey: () => Promise<string>;
           disconnectFromSite?: () => Promise<void>;
           send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
-          sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+          sign: (
+            deployJson: string,
+            signingPublicKeyHex: string,
+            targetPublicKeyHex?: string,
+          ) => Promise<string | Record<string, unknown>>;
         })
       | {
           requestConnection: () => Promise<boolean>;
@@ -44,7 +48,11 @@ declare global {
           getActivePublicKey: () => Promise<string>;
           disconnectFromSite?: () => Promise<void>;
           send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
-          sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+          sign: (
+            deployJson: string,
+            signingPublicKeyHex: string,
+            targetPublicKeyHex?: string,
+          ) => Promise<string | Record<string, unknown>>;
         };
   }
 }
@@ -57,7 +65,8 @@ type WalletProvider = {
   send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
   sign: (
     deployJson: string,
-    publicKeyHex: string,
+    signingPublicKeyHex: string,
+    targetPublicKeyHex?: string,
   ) => Promise<
     | string
     | {
@@ -1340,7 +1349,11 @@ export default function Home() {
       });
       setAgentPublicKey(prepared.agentPublicKey);
       setAgentAccountHash(prepared.agentAccountHash);
-      const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+      const signed = await provider.sign(
+        JSON.stringify(prepared.deployJson),
+        connectedUserPublicKey,
+        connectedUserPublicKey,
+      );
       const signedDeployJson = await buildSignedDeployJson(
         prepared.deployJson,
         connectedUserPublicKey,
