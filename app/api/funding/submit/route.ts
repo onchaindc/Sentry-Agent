@@ -7,7 +7,7 @@ import { getUserRecord } from "@/lib/user-store";
 export const runtime = "nodejs";
 
 const require = createRequire(import.meta.url);
-const { Deploy, PublicKey } = require("casper-js-sdk") as typeof import("casper-js-sdk");
+const { Deploy } = require("casper-js-sdk") as typeof import("casper-js-sdk");
 
 type WalletSignaturePayload = {
   signature?: string;
@@ -32,11 +32,6 @@ function tryParseJson(value: string) {
   } catch {
     return null;
   }
-}
-
-function hexToBytes(value: string) {
-  const normalized = value.startsWith("0x") ? value.slice(2) : value;
-  return Uint8Array.from(Buffer.from(normalized, "hex"));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -182,7 +177,9 @@ function hydrateSignedDeploy(
     findStringByKeys(walletPayload, ["signer", "publickey", "publickeyhex", "public_key"]) ??
     fallbackSignerPublicKey;
   const approvalSignature =
-    findStringByKeys(walletPayload, ["signature", "signaturehex", "sig"]) ?? undefined;
+    findStringByKeys(walletPayload, ["signaturehex"]) ??
+    findStringByKeys(walletPayload, ["signature", "sig"]) ??
+    undefined;
 
   if (!approvalSigner || !approvalSignature) {
     const topLevelKeys = isRecord(walletPayload) ? Object.keys(walletPayload).join(", ") : "none";
@@ -191,8 +188,24 @@ function hydrateSignedDeploy(
     );
   }
 
-  const deploy = Deploy.fromJSON(originalParsed);
-  Deploy.setSignature(deploy, hexToBytes(approvalSignature), PublicKey.fromHex(approvalSigner));
+  if (!isRecord(originalParsed)) {
+    throw new Error("Original deploy payload had an unexpected shape.");
+  }
+
+  const signedDeployJson = {
+    ...originalParsed,
+    approvals: [
+      {
+        signer: approvalSigner,
+        signature: approvalSignature,
+      },
+    ],
+  };
+
+  // Validate the reconstructed deploy before we submit it to the node.
+  const deploy = Deploy.fromJSON(signedDeployJson);
+  deploy.validate();
+
   return JSON.stringify(Deploy.toJSON(deploy));
 }
 
