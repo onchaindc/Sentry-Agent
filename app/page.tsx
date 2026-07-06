@@ -55,7 +55,18 @@ type WalletProvider = {
   getActivePublicKey: () => Promise<string>;
   disconnectFromSite?: () => Promise<void>;
   send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
-  sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
+  sign: (
+    deployJson: string,
+    publicKeyHex: string,
+  ) => Promise<
+    | string
+    | {
+        cancelled?: boolean;
+        signatureHex?: string | null;
+        signature?: unknown;
+      }
+    | Record<string, unknown>
+  >;
 };
 
 const WALLET_PROVIDER_TIMEOUT_MS = 30 * 60 * 1000;
@@ -375,6 +386,66 @@ async function sendDeployWithWallet(
   }
 
   return null;
+}
+
+function normalizeWalletSignatureBytes(signature: unknown): Uint8Array | null {
+  if (!signature) {
+    return null;
+  }
+
+  if (signature instanceof Uint8Array) {
+    return signature;
+  }
+
+  if (Array.isArray(signature) && signature.every((value) => typeof value === "number")) {
+    return Uint8Array.from(signature);
+  }
+
+  if (isRecord(signature)) {
+    const ordered = Object.entries(signature)
+      .filter(([key, value]) => /^\d+$/.test(key) && typeof value === "number")
+      .sort((left, right) => Number(left[0]) - Number(right[0]))
+      .map(([, value]) => value);
+
+    if (ordered.length > 0) {
+      return Uint8Array.from(ordered);
+    }
+  }
+
+  return null;
+}
+
+async function buildSignedDeployJson(
+  deployJson: unknown,
+  signingPublicKeyHex: string,
+  signResult: string | Record<string, unknown>,
+) {
+  if (typeof signResult === "string") {
+    return signResult;
+  }
+
+  if (!isRecord(signResult)) {
+    throw new Error("Wallet returned an unexpected signing payload.");
+  }
+
+  if (signResult.cancelled) {
+    throw new Error("Wallet signing was cancelled.");
+  }
+
+  if (isRecord(signResult.deploy)) {
+    return JSON.stringify(signResult.deploy);
+  }
+
+  const signatureBytes = normalizeWalletSignatureBytes(signResult.signature);
+  if (!signatureBytes) {
+    throw new Error("Wallet signature response did not contain usable signature bytes.");
+  }
+
+  const sdk = await import("casper-js-sdk");
+  const deploy = sdk.Deploy.fromJSON(deployJson);
+  sdk.Deploy.setSignature(deploy, signatureBytes, sdk.PublicKey.fromHex(signingPublicKeyHex));
+
+  return JSON.stringify(sdk.Deploy.toJSON(deploy));
 }
 
 function ShieldCheckIcon() {
@@ -1224,15 +1295,17 @@ export default function Home() {
           message: sendError instanceof Error ? sendError.message : "Wallet send failed.",
         });
         const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+        const signedDeployJson = await buildSignedDeployJson(
+          prepared.deployJson,
+          connectedUserPublicKey,
+          typeof signed === "string" ? { signedPayload: signed } : signed,
+        );
         console.info("[fundAgent] sign:success", {
           userPublicKey: connectedUserPublicKey,
           agentPublicKey: prepared.agentPublicKey,
         });
-        const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
-        const originalDeployJson = JSON.stringify(prepared.deployJson);
         result = await submitAgentFunding(connectedUserPublicKey, {
           signedDeployJson,
-          originalDeployJson,
           agentPublicKey: prepared.agentPublicKey,
         });
       }

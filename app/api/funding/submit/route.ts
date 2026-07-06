@@ -222,7 +222,6 @@ export async function POST(request: Request) {
       userPublicKey?: string;
       deployHash?: string;
       signedDeployJson?: string;
-      originalDeployJson?: string;
       agentPublicKey?: string;
     };
 
@@ -231,7 +230,7 @@ export async function POST(request: Request) {
     }
 
     const hasWalletSubmittedDeploy = Boolean(payload.deployHash?.trim());
-    const hasSignedDeployPayload = Boolean(payload.signedDeployJson?.trim() && payload.originalDeployJson?.trim());
+    const hasSignedDeployPayload = Boolean(payload.signedDeployJson?.trim());
 
     if (!hasWalletSubmittedDeploy && !hasSignedDeployPayload) {
       return NextResponse.json(
@@ -278,16 +277,11 @@ export async function POST(request: Request) {
     const result = hasWalletSubmittedDeploy
       ? await confirmTransferDeploy(payload.deployHash!.trim())
       : await (async () => {
-          const hydratedSignedDeployJson = hydrateSignedDeploy(
-            payload.originalDeployJson!,
-            payload.signedDeployJson!,
-            payload.userPublicKey!,
-          );
-          console.info("[funding.submit] deploy-hydrated", {
+          console.info("[funding.submit] deploy-received-signed", {
             traceId,
             signedPayloadKind: payload.signedDeployJson!.trim().startsWith("{") ? "json" : "raw",
           });
-          return submitSignedTransferDeploy(hydratedSignedDeployJson);
+          return submitSignedTransferDeploy(payload.signedDeployJson!);
         })();
 
     console.info("[funding.submit] deploy-submitted", {

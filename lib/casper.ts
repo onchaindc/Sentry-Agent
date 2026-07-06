@@ -69,7 +69,6 @@ export type FundingSubmitPayload = {
   agentPublicKey: string;
   deployHash?: string;
   signedDeployJson?: string;
-  originalDeployJson?: string;
 };
 
 const merchants = [
