@@ -386,6 +386,14 @@ export async function submitSignedTransferDeploy(signedDeployJson: string) {
   };
 }
 
+export async function confirmTransferDeploy(deployHash: string) {
+  await waitForDeployResult(deployHash);
+
+  return {
+    deployHash,
+  };
+}
+
 export async function runRealCasperCheckAndRecordForAgent(
   amount: number,
   agentPrivateKeyPem: string,

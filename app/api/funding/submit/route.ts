@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import { createDeterministicAgentWallet, getPublicKeyBalance, submitSignedTransferDeploy } from "@/lib/casper-server";
+import {
+  confirmTransferDeploy,
+  createDeterministicAgentWallet,
+  getPublicKeyBalance,
+  submitSignedTransferDeploy,
+} from "@/lib/casper-server";
 import { getUserRecord } from "@/lib/user-store";
 
 export const runtime = "nodejs";
@@ -215,6 +220,7 @@ export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as {
       userPublicKey?: string;
+      deployHash?: string;
       signedDeployJson?: string;
       originalDeployJson?: string;
       agentPublicKey?: string;
@@ -224,19 +230,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A connected wallet public key is required." }, { status: 400 });
     }
 
-    if (!payload.signedDeployJson?.trim()) {
-      return NextResponse.json({ error: "Signed deploy payload is required." }, { status: 400 });
-    }
+    const hasWalletSubmittedDeploy = Boolean(payload.deployHash?.trim());
+    const hasSignedDeployPayload = Boolean(payload.signedDeployJson?.trim() && payload.originalDeployJson?.trim());
 
-    if (!payload.originalDeployJson?.trim()) {
-      return NextResponse.json({ error: "Original deploy payload is required." }, { status: 400 });
+    if (!hasWalletSubmittedDeploy && !hasSignedDeployPayload) {
+      return NextResponse.json(
+        { error: "Either a deploy hash or a signed deploy payload is required." },
+        { status: 400 },
+      );
     }
 
     console.info("[funding.submit] start", {
       traceId,
       userPublicKey: payload.userPublicKey,
+      deployHash: payload.deployHash?.trim() ?? null,
       hasAgentPublicKeyFromClient: Boolean(payload.agentPublicKey?.trim()),
-      signedDeployLength: payload.signedDeployJson.length,
+      signedDeployLength: payload.signedDeployJson?.length ?? 0,
     });
 
     const record = await getUserRecord(payload.userPublicKey, createDeterministicAgentWallet);
@@ -259,23 +268,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User session not found." }, { status: 404 });
     }
 
-    console.info("[funding.submit] submitting-signed-deploy", {
+    console.info("[funding.submit] submitting-funding-deploy", {
       traceId,
       usingFallbackAgentKey: !record,
       agentPublicKey: effectiveAgentPublicKey,
+      mode: hasWalletSubmittedDeploy ? "wallet-send" : "wallet-sign",
     });
 
-    const hydratedSignedDeployJson = hydrateSignedDeploy(
-      payload.originalDeployJson,
-      payload.signedDeployJson,
-      payload.userPublicKey,
-    );
-    console.info("[funding.submit] deploy-hydrated", {
-      traceId,
-      signedPayloadKind: payload.signedDeployJson.trim().startsWith("{") ? "json" : "raw",
-    });
+    const result = hasWalletSubmittedDeploy
+      ? await confirmTransferDeploy(payload.deployHash!.trim())
+      : await (async () => {
+          const hydratedSignedDeployJson = hydrateSignedDeploy(
+            payload.originalDeployJson!,
+            payload.signedDeployJson!,
+            payload.userPublicKey!,
+          );
+          console.info("[funding.submit] deploy-hydrated", {
+            traceId,
+            signedPayloadKind: payload.signedDeployJson!.trim().startsWith("{") ? "json" : "raw",
+          });
+          return submitSignedTransferDeploy(hydratedSignedDeployJson);
+        })();
 
-    const result = await submitSignedTransferDeploy(hydratedSignedDeployJson);
     console.info("[funding.submit] deploy-submitted", {
       traceId,
       deployHash: result.deployHash,

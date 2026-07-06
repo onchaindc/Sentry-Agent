@@ -35,6 +35,7 @@ declare global {
           isConnected?: () => Promise<boolean>;
           getActivePublicKey: () => Promise<string>;
           disconnectFromSite?: () => Promise<void>;
+          send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
           sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
         })
       | {
@@ -42,6 +43,7 @@ declare global {
           isConnected?: () => Promise<boolean>;
           getActivePublicKey: () => Promise<string>;
           disconnectFromSite?: () => Promise<void>;
+          send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
           sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
         };
   }
@@ -52,6 +54,7 @@ type WalletProvider = {
   isConnected?: () => Promise<boolean>;
   getActivePublicKey: () => Promise<string>;
   disconnectFromSite?: () => Promise<void>;
+  send?: (...args: unknown[]) => Promise<string | Record<string, unknown>>;
   sign: (deployJson: string, publicKeyHex: string) => Promise<string | Record<string, unknown>>;
 };
 
@@ -283,6 +286,95 @@ function getWalletProvider() {
   }
 
   return injectedProvider as WalletProvider;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractWalletDeployHash(value: unknown, visited = new Set<unknown>()): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (
+      /^([a-f0-9]{64}|deploy-[a-f0-9]{64}|transaction-[a-f0-9]{64})$/i.test(trimmed)
+    ) {
+      return trimmed;
+    }
+    return null;
+  }
+
+  if (!isRecord(value) || visited.has(value)) {
+    return null;
+  }
+
+  visited.add(value);
+
+  for (const [key, nested] of Object.entries(value)) {
+    const normalized = key.replace(/[_-]/g, "").toLowerCase();
+    if (
+      ["deployhash", "transactionhash", "hash"].includes(normalized) &&
+      typeof nested === "string" &&
+      nested.trim()
+    ) {
+      return nested.trim();
+    }
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = extractWalletDeployHash(nested, visited);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+async function sendDeployWithWallet(
+  provider: WalletProvider,
+  deployJson: unknown,
+  publicKeyHex: string,
+) {
+  if (typeof provider.send !== "function") {
+    return null;
+  }
+
+  const attempts: Array<{ args: unknown[]; label: string }> = [
+    { args: [JSON.stringify(deployJson), publicKeyHex, "casper-test"], label: "json+pk+chain" },
+    { args: [JSON.stringify(deployJson), publicKeyHex], label: "json+pk" },
+    { args: [deployJson, publicKeyHex, "casper-test"], label: "object+pk+chain" },
+    { args: [deployJson, publicKeyHex], label: "object+pk" },
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const attempt of attempts) {
+    try {
+      const result = await provider.send(...attempt.args);
+      const deployHash = extractWalletDeployHash(result);
+
+      if (!deployHash) {
+        throw new Error(`Wallet send did not return a deploy hash for ${attempt.label}.`);
+      }
+
+      return {
+        deployHash,
+        label: attempt.label,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Wallet send failed.");
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  return null;
 }
 
 function ShieldCheckIcon() {
@@ -1107,19 +1199,44 @@ export default function Home() {
       });
       setAgentPublicKey(prepared.agentPublicKey);
       setAgentAccountHash(prepared.agentAccountHash);
-      const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
-      console.info("[fundAgent] sign:success", {
-        userPublicKey: connectedUserPublicKey,
-        agentPublicKey: prepared.agentPublicKey,
-      });
-      const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
-      const originalDeployJson = JSON.stringify(prepared.deployJson);
-      const result = await submitAgentFunding(
-        connectedUserPublicKey,
-        signedDeployJson,
-        prepared.agentPublicKey,
-        originalDeployJson,
-      );
+      let result;
+
+      try {
+        const walletSent = await sendDeployWithWallet(provider, prepared.deployJson, connectedUserPublicKey);
+
+        if (walletSent?.deployHash) {
+          console.info("[fundAgent] send:success", {
+            userPublicKey: connectedUserPublicKey,
+            agentPublicKey: prepared.agentPublicKey,
+            deployHash: walletSent.deployHash,
+            attempt: walletSent.label,
+          });
+          result = await submitAgentFunding(connectedUserPublicKey, {
+            deployHash: walletSent.deployHash,
+            agentPublicKey: prepared.agentPublicKey,
+          });
+        } else {
+          throw new Error("Wallet send API unavailable.");
+        }
+      } catch (sendError) {
+        console.warn("[fundAgent] send:fallback-to-sign", {
+          userPublicKey: connectedUserPublicKey,
+          message: sendError instanceof Error ? sendError.message : "Wallet send failed.",
+        });
+        const signed = await provider.sign(JSON.stringify(prepared.deployJson), connectedUserPublicKey);
+        console.info("[fundAgent] sign:success", {
+          userPublicKey: connectedUserPublicKey,
+          agentPublicKey: prepared.agentPublicKey,
+        });
+        const signedDeployJson = typeof signed === "string" ? signed : JSON.stringify(signed);
+        const originalDeployJson = JSON.stringify(prepared.deployJson);
+        result = await submitAgentFunding(connectedUserPublicKey, {
+          signedDeployJson,
+          originalDeployJson,
+          agentPublicKey: prepared.agentPublicKey,
+        });
+      }
+
       console.info("[fundAgent] submit:success", {
         userPublicKey: connectedUserPublicKey,
         agentPublicKey: prepared.agentPublicKey,

@@ -65,6 +65,13 @@ export type FundingSubmitResponse = {
   agentBalanceCspr: number;
 };
 
+export type FundingSubmitPayload = {
+  agentPublicKey: string;
+  deployHash?: string;
+  signedDeployJson?: string;
+  originalDeployJson?: string;
+};
+
 const merchants = [
   {
     merchant: "CasperIndex",
@@ -155,15 +162,11 @@ export async function prepareAgentFunding(userPublicKey: string, amountCspr: str
 
 export async function submitAgentFunding(
   userPublicKey: string,
-  signedDeployJson: string,
-  agentPublicKey: string,
-  originalDeployJson: string,
+  payload: FundingSubmitPayload,
 ) {
   return postJson<FundingSubmitResponse>("/api/funding/submit", {
     userPublicKey,
-    signedDeployJson,
-    agentPublicKey,
-    originalDeployJson,
+    ...payload,
   });
 }
 
