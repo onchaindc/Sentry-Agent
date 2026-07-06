@@ -28,6 +28,7 @@ const CASPER_NODE_ADDRESS =
 const CASPER_RPC_URL = CASPER_NODE_ADDRESS.endsWith("/rpc")
   ? CASPER_NODE_ADDRESS
   : `${CASPER_NODE_ADDRESS.replace(/\/$/, "")}/rpc`;
+const CSPR_CLOUD_ACCESS_TOKEN = process.env.CSPR_CLOUD_ACCESS_TOKEN;
 const CASPER_CHAIN_NAME = "casper-test";
 const SPEND_GUARDRAIL_CONTRACT_HASH =
   "contract-808477e815f794497a8f18b62d6ec5b70cfdf4c20da4335c65d3562122c89fe8";
@@ -155,6 +156,18 @@ function summarizeCasperPayload(value: unknown, rawJson: string) {
   };
 }
 
+function getCasperRpcHeaders() {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (CSPR_CLOUD_ACCESS_TOKEN && CASPER_RPC_URL.includes("cspr.cloud")) {
+    headers.Authorization = `Bearer ${CSPR_CLOUD_ACCESS_TOKEN}`;
+  }
+
+  return headers;
+}
+
 async function rpcRequest<T>(method: string, params?: Record<string, unknown>) {
   let lastError: unknown;
 
@@ -162,9 +175,7 @@ async function rpcRequest<T>(method: string, params?: Record<string, unknown>) {
     try {
       const response = await fetch(CASPER_RPC_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getCasperRpcHeaders(),
         body: JSON.stringify({
           jsonrpc: "2.0",
           id: Date.now(),
