@@ -467,16 +467,56 @@ function ensureCasperSignaturePrefix(signatureBytes: Uint8Array, signingPublicKe
   return Uint8Array.from([keyPrefix, ...signatureBytes]);
 }
 
+function assertCompactFundingPayload(payload: string) {
+  if (payload.length > 200_000) {
+    throw new Error(
+      `Signed funding payload is unexpectedly large (${payload.length} bytes). A native CSPR transfer should be compact.`,
+    );
+  }
+
+  return payload;
+}
+
 async function buildSignedDeployJson(
   deployJson: unknown,
   signingPublicKeyHex: string,
   signResult: string | Record<string, unknown>,
 ) {
+  const sdk = await import("casper-js-sdk");
+
+  const buildFromSignature = (signatureBytes: Uint8Array) => {
+    const deploy = sdk.Deploy.fromJSON(deployJson);
+    sdk.Deploy.setSignature(
+      deploy,
+      ensureCasperSignaturePrefix(signatureBytes, signingPublicKeyHex),
+      sdk.PublicKey.fromHex(signingPublicKeyHex),
+    );
+
+    return assertCompactFundingPayload(JSON.stringify(sdk.Deploy.toJSON(deploy)));
+  };
+
+  const canonicalizeWalletPayload = (payload: unknown) => {
+    if (looksLikeDeployJson(payload)) {
+      const deploy = sdk.Deploy.fromJSON(payload);
+      return assertCompactFundingPayload(JSON.stringify(sdk.Deploy.toJSON(deploy)));
+    }
+
+    if (looksLikeTransactionJson(payload)) {
+      const transaction = sdk.Transaction.fromJSON(payload);
+      return assertCompactFundingPayload(JSON.stringify(transaction.toJSON()));
+    }
+
+    return null;
+  };
+
   if (typeof signResult === "string") {
     const parsed = parseMaybeJsonString(signResult);
-    if (looksLikeDeployJson(parsed) || looksLikeTransactionJson(parsed)) {
-      return JSON.stringify(parsed);
+    const canonicalPayload = canonicalizeWalletPayload(parsed);
+
+    if (canonicalPayload) {
+      return canonicalPayload;
     }
+
     throw new Error("Wallet returned a string payload that was not a signed deploy.");
   }
 
@@ -488,29 +528,22 @@ async function buildSignedDeployJson(
     throw new Error("Wallet signing was cancelled.");
   }
 
-  if (looksLikeDeployJson(signResult.deploy)) {
-    return JSON.stringify(signResult.deploy);
-  }
-
-  if (looksLikeTransactionJson(signResult.transaction)) {
-    return JSON.stringify(signResult.transaction);
-  }
-
   const signatureBytes =
     normalizeWalletSignatureBytes(signResult.signature) ?? signatureHexToBytes(signResult.signatureHex);
-  if (!signatureBytes) {
-    throw new Error("Wallet signature response did not contain usable signature bytes.");
+
+  if (signatureBytes) {
+    return buildFromSignature(signatureBytes);
   }
 
-  const sdk = await import("casper-js-sdk");
-  const deploy = sdk.Deploy.fromJSON(deployJson);
-  sdk.Deploy.setSignature(
-    deploy,
-    ensureCasperSignaturePrefix(signatureBytes, signingPublicKeyHex),
-    sdk.PublicKey.fromHex(signingPublicKeyHex),
-  );
+  const canonicalPayload =
+    canonicalizeWalletPayload(signResult.deploy) ??
+    canonicalizeWalletPayload(signResult.transaction);
 
-  return JSON.stringify(sdk.Deploy.toJSON(deploy));
+  if (canonicalPayload) {
+    return canonicalPayload;
+  }
+
+  throw new Error("Wallet signature response did not contain usable signature bytes.");
 }
 
 function ShieldCheckIcon() {
