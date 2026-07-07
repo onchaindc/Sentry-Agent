@@ -79,6 +79,7 @@ type WalletProvider = {
 };
 
 const WALLET_PROVIDER_TIMEOUT_MS = 30 * 60 * 1000;
+const MIN_AGENT_FUND_CSPR = 2.5;
 
 const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
 const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
@@ -1083,7 +1084,7 @@ export default function Home() {
   const [agentPublicKey, setAgentPublicKey] = useState("");
   const [agentAccountHash, setAgentAccountHash] = useState("");
   const [agentBalanceCspr, setAgentBalanceCspr] = useState(0);
-  const [fundAmount, setFundAmount] = useState("2.0");
+  const [fundAmount, setFundAmount] = useState("2.5");
   const [isFundingAgent, setIsFundingAgent] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -1093,6 +1094,13 @@ export default function Home() {
   const requestIndex = useRef(0);
 
   const isWalletConnected = Boolean(connectedUserPublicKey);
+  const parsedFundAmount = Number(fundAmount);
+  const hasValidFundAmount = Number.isFinite(parsedFundAmount) && parsedFundAmount >= MIN_AGENT_FUND_CSPR;
+  const fundAmountHint = fundAmount.trim()
+    ? hasValidFundAmount
+      ? ""
+      : `Minimum ${MIN_AGENT_FUND_CSPR} CSPR`
+    : "Enter an amount";
 
   const snapshot: SpendSnapshot = useMemo(
     () => ({
@@ -1324,6 +1332,12 @@ export default function Home() {
       return;
     }
 
+    if (!hasValidFundAmount) {
+      setStatusTone("danger");
+      setStatusMessage(`Minimum funding amount is ${MIN_AGENT_FUND_CSPR} CSPR.`);
+      return;
+    }
+
     const provider = getWalletProvider();
     if (!provider) {
       setStatusTone("danger");
@@ -1393,7 +1407,7 @@ export default function Home() {
     } finally {
       setIsFundingAgent(false);
     }
-  }, [connectedUserPublicKey, fundAmount]);
+  }, [connectedUserPublicKey, fundAmount, hasValidFundAmount]);
 
   const firePayment = useCallback(async () => {
     if (!connectedUserPublicKey) {
@@ -1812,19 +1826,27 @@ export default function Home() {
                         <input
                           className="h-12 flex-1 rounded-[14px] border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-[15px] text-[var(--text)] outline-none"
                           inputMode="decimal"
-                          placeholder="2.0"
+                          min={MIN_AGENT_FUND_CSPR}
+                          placeholder="2.5"
+                          step="0.1"
+                          type="number"
                           value={fundAmount}
                           onChange={(event) => setFundAmount(event.target.value)}
                         />
                         <button
                           className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                           type="button"
-                          disabled={!isWalletConnected || isFundingAgent}
+                          disabled={!isWalletConnected || isFundingAgent || !hasValidFundAmount}
                           onClick={() => void fundAgent()}
                         >
                           {isFundingAgent ? "Waiting for signature..." : "Fund agent"}
                         </button>
                       </div>
+                      {fundAmountHint ? (
+                        <p className="mt-2 text-[12px] font-medium text-[var(--danger)]">
+                          {fundAmountHint}
+                        </p>
+                      ) : null}
                       <p className="mt-3 text-[13px] leading-[1.7] text-[var(--muted)]">
                         Move testnet CSPR into your agent wallet before running live requests.
                       </p>
