@@ -421,6 +421,47 @@ export async function buildFundingTransferDeploy(userPublicKeyHex: string, agent
   return Deploy.toJSON(deploy);
 }
 
+async function submitDeployViaAccountPutDeploy(
+  deploy: InstanceType<typeof Deploy>,
+  context: string,
+  maxRpcBodyBytes = MAX_NATIVE_TRANSFER_JSON_BYTES,
+) {
+  const compactDeployJson = Deploy.toJSON(deploy);
+  const rpcBody = JSON.stringify({
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: "account_put_deploy",
+    params: {
+      deploy: compactDeployJson,
+    },
+  });
+  const rpcBodyByteSize = byteLength(rpcBody);
+
+  console.info(`[${context}] account-put-deploy-rpc-body`, {
+    rpcUrl: CASPER_RPC_URL,
+    byteSize: rpcBodyByteSize,
+  });
+
+  if (rpcBodyByteSize > maxRpcBodyBytes) {
+    throw new Error(
+      `${context} deploy RPC body is ${rpcBodyByteSize} bytes before submission. Expected a compact Casper deploy.`,
+    );
+  }
+
+  const putResult = await rpcRequest<{
+    deploy_hash?: string;
+  }>("account_put_deploy", {
+    deploy: compactDeployJson,
+  });
+  const deployHash = putResult.deploy_hash;
+
+  if (!deployHash) {
+    throw new Error(`Casper RPC did not return a deploy hash for ${context}.`);
+  }
+
+  return deployHash;
+}
+
 export async function submitSignedTransferDeploy(signedDeployJson: string) {
   const signedPayloadByteSize = byteLength(signedDeployJson);
 
@@ -442,38 +483,7 @@ export async function submitSignedTransferDeploy(signedDeployJson: string) {
     throw new Error(`Signed funding deploy is invalid before submission: ${message}`);
   }
 
-  const compactDeployJson = Deploy.toJSON(deploy);
-  const rpcBody = JSON.stringify({
-    jsonrpc: "2.0",
-    id: Date.now(),
-    method: "account_put_deploy",
-    params: {
-      deploy: compactDeployJson,
-    },
-  });
-  const rpcBodyByteSize = byteLength(rpcBody);
-
-  console.info("[funding.submit] account-put-deploy-rpc-body", {
-    rpcUrl: CASPER_RPC_URL,
-    byteSize: rpcBodyByteSize,
-  });
-
-  if (rpcBodyByteSize > MAX_NATIVE_TRANSFER_JSON_BYTES) {
-    throw new Error(
-      `Funding deploy RPC body is ${rpcBodyByteSize} bytes before submission. A native CSPR transfer should be compact.`,
-    );
-  }
-
-  const putResult = await rpcRequest<{
-    deploy_hash?: string;
-  }>("account_put_deploy", {
-    deploy: compactDeployJson,
-  });
-  const deployHash = putResult.deploy_hash;
-
-  if (!deployHash) {
-    throw new Error("Casper RPC did not return a deploy hash for the funding transfer.");
-  }
+  const deployHash = await submitDeployViaAccountPutDeploy(deploy, "funding.submit");
 
   await waitForDeployResult(deployHash);
 
@@ -514,9 +524,7 @@ export async function runRealCasperCheckAndRecordForAgent(
   const deploy = Deploy.makeDeploy(deployHeader, payment, session);
   deploy.sign(signer);
 
-  const client = getClient();
-  const putResult = await client.putDeploy(deploy);
-  const deployHash = putResult.deployHash.toHex();
+  const deployHash = await submitDeployViaAccountPutDeploy(deploy, "casper.check-and-record");
   const executionResult = await waitForDeployResult(deployHash);
   const blocked = extractExecutionFailure(executionResult);
 
