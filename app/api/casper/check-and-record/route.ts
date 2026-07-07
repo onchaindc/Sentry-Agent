@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createDeterministicAgentWallet, getPublicKeyBalance, runRealCasperCheckAndRecordForAgent } from "@/lib/casper-server";
+import {
+  CONTRACT_PAYMENT_CSPR,
+  createDeterministicAgentWallet,
+  getPublicKeyBalance,
+  runRealCasperCheckAndRecordForAgent,
+} from "@/lib/casper-server";
 import { readAgentBalancesViaCsprTradeMcp } from "@/lib/cspr-trade-mcp";
 import { getUserRecord } from "@/lib/user-store";
 
@@ -33,7 +38,7 @@ export async function POST(request: Request) {
     const fallbackBalance = await getPublicKeyBalance(record.agent.publicKey).catch(() => undefined);
     const effectiveBalance =
       typeof mcpBalance.nativeCspr === "number" ? mcpBalance.nativeCspr : fallbackBalance;
-    const requiredOperationalBalance = Math.max(payload.amount, 1);
+    const requiredOperationalBalance = CONTRACT_PAYMENT_CSPR;
 
     if (typeof effectiveBalance === "number" && effectiveBalance < requiredOperationalBalance) {
       return NextResponse.json({

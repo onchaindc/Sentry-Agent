@@ -79,7 +79,8 @@ type WalletProvider = {
 };
 
 const WALLET_PROVIDER_TIMEOUT_MS = 30 * 60 * 1000;
-const MIN_AGENT_FUND_CSPR = 2.5;
+const MIN_AGENT_FUND_CSPR = 6;
+const MAX_COMPACT_FUNDING_PAYLOAD_BYTES = 20_000;
 
 const chartRanges: ChartRange[] = ["1H", "24H", "7D"];
 const activityFilters: ActivityFilter[] = ["all", "approved", "blocked"];
@@ -441,9 +442,9 @@ function ensureCasperSignaturePrefix(signatureBytes: Uint8Array, signingPublicKe
 }
 
 function assertCompactFundingPayload(payload: string) {
-  if (payload.length > 200_000) {
+  if (getJsonByteSize(payload) > MAX_COMPACT_FUNDING_PAYLOAD_BYTES) {
     throw new Error(
-      `Signed funding payload is unexpectedly large (${payload.length} bytes). A native CSPR transfer should be compact.`,
+      "Wallet returned an oversized funding payload. Refresh the page and sign the compact transfer again.",
     );
   }
 
@@ -476,13 +477,45 @@ async function buildSignedDeployJson(
     return assertCompactFundingPayload(JSON.stringify(sdk.Deploy.toJSON(deploy)));
   };
 
+  const getApprovalSignatureBytes = (payload: unknown) => {
+    if (!isRecord(payload) || !Array.isArray(payload.approvals)) {
+      return null;
+    }
+
+    for (const approval of payload.approvals) {
+      if (!isRecord(approval)) {
+        continue;
+      }
+
+      const signatureBytes =
+        normalizeWalletSignatureBytes(approval.signature) ??
+        signatureHexToBytes(approval.signature);
+
+      if (signatureBytes) {
+        return signatureBytes;
+      }
+    }
+
+    return null;
+  };
+
   const canonicalizeWalletPayload = (payload: unknown) => {
     if (looksLikeDeployJson(payload)) {
+      const signatureBytes = getApprovalSignatureBytes(payload);
+      if (signatureBytes) {
+        return buildFromSignature(signatureBytes);
+      }
+
       const deploy = sdk.Deploy.fromJSON(payload);
       return assertCompactFundingPayload(JSON.stringify(sdk.Deploy.toJSON(deploy)));
     }
 
     if (looksLikeTransactionJson(payload)) {
+      const signatureBytes = getApprovalSignatureBytes(payload);
+      if (signatureBytes) {
+        return buildFromSignature(signatureBytes);
+      }
+
       const transaction = sdk.Transaction.fromJSON(payload);
       return assertCompactFundingPayload(JSON.stringify(transaction.toJSON()));
     }
@@ -516,7 +549,9 @@ async function buildSignedDeployJson(
     return buildFromSignature(signatureBytes);
   }
 
+  const approvalSignatureBytes = getApprovalSignatureBytes(signResult);
   const canonicalPayload =
+    (approvalSignatureBytes ? buildFromSignature(approvalSignatureBytes) : null) ??
     canonicalizeWalletPayload(signResult.deploy) ??
     canonicalizeWalletPayload(signResult.transaction);
 
@@ -693,6 +728,15 @@ function SentryAgentMark() {
   return <img alt="" className="h-5 w-5 flex-none object-contain" src="/sentryagent-logo.png" />;
 }
 
+function ButtonSpinner() {
+  return (
+    <span
+      aria-hidden="true"
+      className="h-4 w-4 rounded-full border-2 border-current border-t-transparent opacity-80 animate-spin"
+    />
+  );
+}
+
 function AppChrome({
   theme,
   remainingBudget,
@@ -749,7 +793,7 @@ function AppChrome({
           </button>
           {isNotificationsOpen ? (
             <div className="absolute right-0 top-[calc(100%+10px)] z-20 w-[280px] rounded-[18px] border border-[var(--border)] bg-[var(--card)] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.12)]">
-              <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Notifications</p>
+              <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Notifications</p>
               <div className="mt-4">
                 {notifications.length ? (
                   <div className="space-y-3">
@@ -852,6 +896,7 @@ function SpendChart({
   labels: string[];
 }) {
   const max = Math.max(...values, 1);
+  const hasSpend = values.some((value) => value > 0);
   const points = values
     .map((value, index) => {
       const x = (index / (values.length - 1)) * 100;
@@ -878,6 +923,13 @@ function SpendChart({
             strokeWidth="2"
           />
         </svg>
+        {!hasSpend ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="rounded-full border border-[var(--divider)] bg-[var(--card)] px-4 py-2 text-[13px] font-medium text-[var(--muted)]">
+              No spend recorded yet
+            </span>
+          </div>
+        ) : null}
       </div>
       <div className="mt-4 grid grid-cols-5 text-[10px] text-[var(--faint)]">
         {labels.map((label) => (
@@ -1009,7 +1061,7 @@ function ActivityRow({
     <div
       className={`grid grid-cols-[110px_minmax(0,1fr)_120px_110px] gap-4 px-6 py-5 sm:grid-cols-[140px_minmax(0,1fr)_140px_130px] sm:px-7 ${
         isNewest ? "feed-row-flash" : ""
-      }`}
+      } ${item.status === "checking" ? "animate-pulse" : ""}`}
     >
       <span className="text-[13px] text-[var(--muted)]">{formatTime(item.requestedAt)}</span>
       <div className="min-w-0">
@@ -1044,7 +1096,7 @@ function MetricTile({
 }) {
   return (
     <div className="glider-card rounded-[20px] px-6 py-6">
-      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
+      <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">{label}</p>
       <p className="mt-4 text-[40px] font-bold leading-none text-[var(--text)]">{value}</p>
       <p className="mt-3 text-[15px] leading-[1.6] text-[var(--muted)]">{detail}</p>
     </div>
@@ -1084,13 +1136,12 @@ export default function Home() {
   const [agentPublicKey, setAgentPublicKey] = useState("");
   const [agentAccountHash, setAgentAccountHash] = useState("");
   const [agentBalanceCspr, setAgentBalanceCspr] = useState(0);
-  const [fundAmount, setFundAmount] = useState("2.5");
+  const [fundAmount, setFundAmount] = useState("6");
   const [isFundingAgent, setIsFundingAgent] = useState(false);
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusTone, setStatusTone] = useState<"neutral" | "success" | "danger">("neutral");
   const [hasLoadedSession, setHasLoadedSession] = useState(false);
-  const [latestX402Trace, setLatestX402Trace] = useState<string[]>([]);
   const requestIndex = useRef(0);
 
   const isWalletConnected = Boolean(connectedUserPublicKey);
@@ -1279,7 +1330,6 @@ export default function Home() {
           : await runMockX402ComplianceCheck(request);
 
       if (result.trace?.length) {
-        setLatestX402Trace(result.trace);
         console.info("[SentryAgent x402]", result.trace.join("\n"));
       }
 
@@ -1373,11 +1423,10 @@ export default function Home() {
         connectedUserPublicKey,
         signed,
       );
-      console.info("[fundAgent] signed payload before submit", {
+      console.info("[fundAgent] signed payload ready", {
         userPublicKey: connectedUserPublicKey,
         agentPublicKey: prepared.agentPublicKey,
         summary: summarizeFundingPayloadJson(signedDeployJson),
-        signedDeployJson,
       });
       const result = await submitAgentFunding(connectedUserPublicKey, {
         signedDeployJson,
@@ -1427,6 +1476,19 @@ export default function Home() {
       }
 
       setIsSubmittingLiveCasper(true);
+      setStatusTone("neutral");
+      setStatusMessage("Submitting guardrail check to Casper...");
+      setActivityLog((current) => [
+        {
+          ...request,
+          status: "checking",
+          reasonCode: "checking_unknown_endpoint",
+          reason: "Waiting for Casper confirmation...",
+          checkedAt: Date.now(),
+          source: "casper",
+        },
+        ...current,
+      ]);
 
       try {
         const result = await checkAndRecordOnCasper(connectedUserPublicKey, request);
@@ -1439,17 +1501,21 @@ export default function Home() {
           (result.status === "approved"
             ? `Casper testnet approved ${result.onchainAmount} cents via ${shortDeployHash(result.deployHash)}.`
             : `Casper testnet blocked ${result.onchainAmount} cents at the onchain cap via ${shortDeployHash(result.deployHash)}.`);
-        const nextItem: ActivityItem = {
-          ...request,
-          status: result.status,
-          reasonCode: result.status === "approved" ? "allowlisted" : "per_call_cap",
-          reason: fallbackReason,
-          checkedAt: Date.now(),
-          source: result.source === "mcp" ? "mock" : "casper",
-          deployHash: result.deployHash || undefined,
-        };
-
-        setActivityLog((current) => [nextItem, ...current]);
+        setActivityLog((current) =>
+          current.map((item) =>
+            item.id === request.id
+              ? {
+                  ...item,
+                  status: result.status,
+                  reasonCode: result.status === "approved" ? "allowlisted" : "per_call_cap",
+                  reason: fallbackReason,
+                  checkedAt: Date.now(),
+                  source: result.source === "mcp" ? "mock" : "casper",
+                  deployHash: result.deployHash || undefined,
+                }
+              : item,
+          ),
+        );
         if (typeof result.agentBalanceCspr === "number") {
           setAgentBalanceCspr(result.agentBalanceCspr);
         }
@@ -1461,17 +1527,20 @@ export default function Home() {
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Casper testnet request failed.";
-        setActivityLog((current) => [
-          {
-            ...request,
-            status: "blocked",
-            reasonCode: "per_call_cap",
-            reason: `Casper testnet call failed: ${message}`,
-            checkedAt: Date.now(),
-            source: "casper",
-          },
-          ...current,
-        ]);
+        setActivityLog((current) =>
+          current.map((item) =>
+            item.id === request.id
+              ? {
+                  ...item,
+                  status: "blocked",
+                  reasonCode: "per_call_cap",
+                  reason: `Casper testnet call failed: ${message}`,
+                  checkedAt: Date.now(),
+                  source: "casper",
+                }
+              : item,
+          ),
+        );
         setStatusTone("danger");
         setStatusMessage(message);
       } finally {
@@ -1536,7 +1605,7 @@ export default function Home() {
 
     return liveSpend.length
       ? [...base.slice(0, Math.max(0, 5 - liveSpend.length)), ...liveSpend].slice(-5)
-      : base;
+      : [0, 0, 0, 0, 0];
   }, [activityLog, chartRange]);
 
   const chartLabels =
@@ -1644,10 +1713,10 @@ export default function Home() {
             {dashboardTab === "Overview" ? (
               <div className="space-y-6">
                 <section className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                  <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                  <div className="glider-card rounded-[24px] px-6 py-6 sm:px-7 sm:py-7">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                       <div className="max-w-[720px]">
-                        <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Live monitor</p>
+                        <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Live monitor</p>
                         <h2 className="mt-4 text-[36px] font-semibold tracking-[-0.03em] text-[var(--text)] sm:text-[48px]">
                           Watch every spend request before funds move.
                         </h2>
@@ -1662,8 +1731,8 @@ export default function Home() {
                           disabled={!isWalletConnected || isSubmittingLiveCasper}
                           onClick={() => void firePayment()}
                         >
-                          <PlayIcon />
-                          {isSubmittingLiveCasper ? "Sending to Casper..." : "Fire request"}
+                          {isSubmittingLiveCasper ? <ButtonSpinner /> : <PlayIcon />}
+                          {isSubmittingLiveCasper ? "Processing..." : "Fire request"}
                         </button>
                         <button
                           className={`inline-flex h-14 items-center gap-2 rounded-full border px-6 text-[15px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -1697,8 +1766,8 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
-                    <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
+                  <div className="glider-card rounded-[24px] px-6 py-6 sm:px-7 sm:py-7">
+                    <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
                     <div className="mt-6 flex items-start gap-5">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
                         <RobotIcon />
@@ -1753,7 +1822,7 @@ export default function Home() {
                 <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
                   <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Recent activity</p>
+                      <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Recent activity</p>
                       <h3 className="mt-3 text-[28px] font-semibold tracking-[-0.03em] text-[var(--text)]">
                         Latest decisions
                       </h3>
@@ -1784,10 +1853,10 @@ export default function Home() {
 
             {dashboardTab === "Policy" ? (
               <div className="space-y-6">
-                <section className="glider-card rounded-[24px] px-7 py-7 sm:px-8 sm:py-8">
+                <section className="glider-card rounded-[24px] px-6 py-6 sm:px-7 sm:py-7">
                   <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
                     <div className="max-w-[720px]">
-                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
+                      <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Guarded agent</p>
                       <div className="mt-6 flex items-start gap-5">
                         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-accent)] text-[var(--accent-strong)]">
                           <RobotIcon />
@@ -1821,25 +1890,26 @@ export default function Home() {
                     </div>
 
                     <div className="w-full max-w-[420px] border-t border-[var(--divider)] pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Fund agent</p>
+                      <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Fund agent</p>
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                         <input
                           className="h-12 flex-1 rounded-[14px] border border-[var(--input-border)] bg-[var(--input-bg)] px-4 text-[15px] text-[var(--text)] outline-none"
                           inputMode="decimal"
                           min={MIN_AGENT_FUND_CSPR}
-                          placeholder="2.5"
+                          placeholder="6"
                           step="0.1"
                           type="number"
                           value={fundAmount}
                           onChange={(event) => setFundAmount(event.target.value)}
                         />
                         <button
-                          className="inline-flex h-12 items-center justify-center rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[var(--text)] px-6 text-[14px] font-medium text-[var(--bg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                           type="button"
                           disabled={!isWalletConnected || isFundingAgent || !hasValidFundAmount}
                           onClick={() => void fundAgent()}
                         >
-                          {isFundingAgent ? "Waiting for signature..." : "Fund agent"}
+                          {isFundingAgent ? <ButtonSpinner /> : null}
+                          {isFundingAgent ? "Processing..." : "Fund agent"}
                         </button>
                       </div>
                       {fundAmountHint ? (
@@ -1909,28 +1979,10 @@ export default function Home() {
 
             {dashboardTab === "Activity" ? (
               <div className="space-y-6">
-                {latestX402Trace.length ? (
-                  <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)] px-6 py-6 sm:px-7">
-                    <div className="flex flex-col gap-3">
-                      <div>
-                        <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Compliance trace</p>
-                        <h3 className="mt-3 text-[24px] font-semibold tracking-[-0.03em] text-[var(--text)]">
-                          Latest RiskLens check
-                        </h3>
-                      </div>
-                      <div className="space-y-2 font-mono text-[13px] leading-[1.7] text-[var(--muted)]">
-                        {latestX402Trace.map((entry) => (
-                          <p key={entry}>{entry}</p>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-                ) : null}
-
                 <section className="rounded-[24px] border border-[var(--border)] bg-[var(--card)]">
                   <div className="flex flex-col gap-4 border-b border-[var(--divider)] px-6 py-6 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-[12px] uppercase tracking-[0.16em] text-[var(--faint)]">Activity feed</p>
+                      <p className="text-[12px] font-medium uppercase tracking-[0.16em] text-[var(--faint)]">Activity feed</p>
                       <h3 className="mt-3 text-[30px] font-semibold tracking-[-0.03em] text-[var(--text)]">
                         Live activity stream
                       </h3>
